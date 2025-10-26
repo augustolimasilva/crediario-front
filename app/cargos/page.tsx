@@ -211,9 +211,9 @@ export default function CargosPage() {
             
             <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-2">
-                {session.user?.avatar ? (
+                {session.user?.image ? (
                   <img
-                    src={session.user.avatar}
+                    src={session.user.image}
                     alt="Avatar"
                     className="h-8 w-8 rounded-full"
                   />
