@@ -2,7 +2,7 @@
 
 import { useSession, signOut } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { 
@@ -60,7 +60,7 @@ interface FuncionarioForm {
   cargoId: string;
 }
 
-export default function FuncionariosPage() {
+function FuncionariosPageContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -840,5 +840,13 @@ export default function FuncionariosPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function FuncionariosPage() {
+  return (
+    <Suspense fallback={<div>Carregando...</div>}>
+      <FuncionariosPageContent />
+    </Suspense>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { 
@@ -44,7 +44,7 @@ interface ProdutoForm {
   ativo: boolean;
 }
 
-export default function ProdutosPage() {
+function ProdutosPageContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -631,6 +631,14 @@ export default function ProdutosPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function ProdutosPage() {
+  return (
+    <Suspense fallback={<div>Carregando...</div>}>
+      <ProdutosPageContent />
+    </Suspense>
   );
 }
 
