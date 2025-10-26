@@ -38,6 +38,7 @@ interface ProdutoForm {
   descricao?: string;
   marca?: string;
   cor?: string;
+  nomeFornecedor?: string;
   valorVenda: number;
   quantidadeMinimaEstoque: number;
   ativo: boolean;
