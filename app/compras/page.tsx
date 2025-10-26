@@ -123,11 +123,7 @@ export default function ComprasPage() {
 
   const loadProdutos = async () => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/produto`, {
-        headers: {
-          'Authorization': `Bearer ${session?.accessToken}`,
-        },
-      });
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/produto`);
 
       if (response.ok) {
         const produtosData = await response.json();
@@ -176,7 +172,7 @@ export default function ComprasPage() {
         },
         body: JSON.stringify({
           ...data,
-          usuarioId: session?.user?.id,
+          usuarioId: 'temp-user-id', // TODO: Implementar sistema de autenticação adequado
         }),
       });
 
