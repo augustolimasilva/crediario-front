@@ -30,17 +30,25 @@ interface CompraItem {
   valorUnitario: number;
 }
 
+interface CompraPagamento {
+  formaPagamento: string;
+  valor: number;
+  dataVencimento: string;
+  dataPagamento?: string;
+  quantidadeParcelas?: number;
+  observacao?: string;
+}
+
 interface CompraForm {
   nomeFornecedor: string;
-  formaPagamento: string;
   dataCompra: string;
   itens: CompraItem[];
+  pagamentos: CompraPagamento[];
 }
 
 interface Compra {
   id: string;
   nomeFornecedor: string;
-  formaPagamento: string;
   valorTotal: number;
   dataCompra: string;
   usuario: {
@@ -52,6 +60,15 @@ interface Compra {
     quantidade: number;
     valorUnitario: number;
     valorTotal: number;
+  }>;
+  pagamentos: Array<{
+    id: string;
+    formaPagamento: string;
+    valor: number;
+    dataVencimento: string;
+    dataPagamento?: string;
+    status: string;
+    observacao?: string;
   }>;
   createdAt: string;
 }
@@ -79,15 +96,20 @@ export default function ComprasPage() {
   const compraForm = useForm<CompraForm>({
     defaultValues: {
       nomeFornecedor: '',
-      formaPagamento: 'PIX',
       dataCompra: new Date().toISOString().split('T')[0],
       itens: [{ produtoId: '', quantidade: 1, valorUnitario: 0 }],
+      pagamentos: [{ formaPagamento: 'PIX', valor: 0, dataVencimento: new Date().toISOString().split('T')[0] }],
     },
   });
 
   const { fields, append, remove } = useFieldArray({
     control: compraForm.control,
     name: 'itens',
+  });
+
+  const { fields: pagamentoFields, append: appendPagamento, remove: removePagamento } = useFieldArray({
+    control: compraForm.control,
+    name: 'pagamentos',
   });
 
   useEffect(() => {
@@ -141,9 +163,48 @@ export default function ComprasPage() {
     }, 0);
   };
 
+  const calcularValorTotalPagamentos = () => {
+    const pagamentos = compraForm.watch('pagamentos');
+    return pagamentos.reduce((total, pagamento) => {
+      return total + (pagamento.valor || 0);
+    }, 0);
+  };
+
+  const isFormValid = () => {
+    const valorTotalItens = calcularValorTotal();
+    const valorTotalPagamentos = calcularValorTotalPagamentos();
+    const pagamentos = compraForm.watch('pagamentos');
+    
+    // Verificar se os valores coincidem (com tolerância de 0.01)
+    const valoresCoincidem = Math.abs(valorTotalPagamentos - valorTotalItens) <= 0.01;
+    
+    // Verificar se há pelo menos um pagamento
+    const temPagamentos = pagamentos.length > 0;
+    
+    // Verificar se todos os pagamentos têm dados válidos
+    const pagamentosValidos = pagamentos.every(pagamento => {
+      const temFormaPagamento = pagamento.formaPagamento && pagamento.formaPagamento !== '';
+      const temValor = pagamento.valor && pagamento.valor > 0;
+      const temDataVencimento = pagamento.dataVencimento && pagamento.dataVencimento !== '';
+      
+      // Se for cartão de crédito, verificar se tem quantidade de parcelas
+      const temParcelas = pagamento.formaPagamento !== 'CARTAO_CREDITO' || 
+                         (pagamento.quantidadeParcelas && pagamento.quantidadeParcelas > 0);
+      
+      return temFormaPagamento && temValor && temDataVencimento && temParcelas;
+    });
+    
+    return valoresCoincidem && temPagamentos && pagamentosValidos;
+  };
+
   const handleCreateCompra = async (data: CompraForm) => {
     if (data.itens.length === 0) {
       toast.error('Adicione pelo menos um produto');
+      return;
+    }
+
+    if (data.pagamentos.length === 0) {
+      toast.error('Adicione pelo menos uma forma de pagamento');
       return;
     }
 
@@ -161,6 +222,35 @@ export default function ComprasPage() {
         toast.error('Valor unitário deve ser maior que zero');
         return;
       }
+    }
+
+    // Validar pagamentos
+    for (const pagamento of data.pagamentos) {
+      if (!pagamento.formaPagamento) {
+        toast.error('Selecione a forma de pagamento para todos os pagamentos');
+        return;
+      }
+      if (pagamento.valor <= 0) {
+        toast.error('Valor do pagamento deve ser maior que zero');
+        return;
+      }
+      if (!pagamento.dataVencimento) {
+        toast.error('Data de vencimento é obrigatória para todos os pagamentos');
+        return;
+      }
+      if (pagamento.formaPagamento === 'CARTAO_CREDITO' && (!pagamento.quantidadeParcelas || pagamento.quantidadeParcelas <= 0)) {
+        toast.error('Quantidade de parcelas é obrigatória para cartão de crédito');
+        return;
+      }
+    }
+
+    // Validar se o valor total dos pagamentos é igual ao valor total da compra
+    const valorTotalItens = calcularValorTotal();
+    const valorTotalPagamentos = calcularValorTotalPagamentos();
+    
+    if (Math.abs(valorTotalPagamentos - valorTotalItens) > 0.01) {
+      toast.error(`O valor total dos pagamentos (R$ ${valorTotalPagamentos.toFixed(2)}) deve ser igual ao valor total da compra (R$ ${valorTotalItens.toFixed(2)})`);
+      return;
     }
 
     try {
@@ -181,9 +271,9 @@ export default function ComprasPage() {
         setShowCreateForm(false);
         compraForm.reset({
           nomeFornecedor: '',
-          formaPagamento: 'PIX',
           dataCompra: new Date().toISOString().split('T')[0],
           itens: [{ produtoId: '', quantidade: 1, valorUnitario: 0 }],
+          pagamentos: [{ formaPagamento: 'PIX', valor: 0, dataVencimento: new Date().toISOString().split('T')[0] }],
         });
         loadCompras();
       } else {
@@ -286,9 +376,9 @@ export default function ComprasPage() {
             setShowCreateForm(true);
             compraForm.reset({
               nomeFornecedor: '',
-              formaPagamento: 'PIX',
               dataCompra: new Date().toISOString().split('T')[0],
               itens: [{ produtoId: '', quantidade: 1, valorUnitario: 0 }],
+              pagamentos: [{ formaPagamento: 'PIX', valor: 0, dataVencimento: new Date().toISOString().split('T')[0] }],
             });
           }}
           className="flex items-center space-x-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors"
@@ -306,7 +396,7 @@ export default function ComprasPage() {
           </h3>
           <form onSubmit={compraForm.handleSubmit(handleCreateCompra)} className="space-y-6">
             {/* Dados da Compra */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Nome do Fornecedor *
@@ -322,22 +412,6 @@ export default function ComprasPage() {
                     {compraForm.formState.errors.nomeFornecedor.message}
                   </p>
                 )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Forma de Pagamento *
-                </label>
-                <select
-                  {...compraForm.register('formaPagamento', { required: true })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                >
-                  {formasPagamento.map((forma) => (
-                    <option key={forma.value} value={forma.value}>
-                      {forma.label}
-                    </option>
-                  ))}
-                </select>
               </div>
 
               <div>
@@ -439,13 +513,165 @@ export default function ComprasPage() {
               </div>
             </div>
 
-            {/* Valor Total */}
-            <div className="flex justify-end">
-              <div className="bg-indigo-50 px-6 py-4 rounded-lg">
+            {/* Formas de Pagamento */}
+            <div>
+              <div className="flex justify-between items-center mb-3">
+                <label className="text-sm font-medium text-gray-700">
+                  Formas de Pagamento *
+                </label>
+                <button
+                  type="button"
+                  onClick={() => appendPagamento({ formaPagamento: 'PIX', valor: 0, dataVencimento: new Date().toISOString().split('T')[0] })}
+                  className="flex items-center space-x-1 text-sm text-indigo-600 hover:text-indigo-700"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>Adicionar Pagamento</span>
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                {pagamentoFields.map((field, index) => (
+                  <div key={field.id} className="grid grid-cols-1 md:grid-cols-12 gap-3 p-4 bg-gray-50 rounded-lg">
+                    <div className="md:col-span-3">
+                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                        Forma de Pagamento *
+                      </label>
+                      <select
+                        {...compraForm.register(`pagamentos.${index}.formaPagamento` as const, { required: true })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      >
+                        <option value="">Selecione a forma</option>
+                        {formasPagamento.map((forma) => (
+                          <option key={forma.value} value={forma.value}>
+                            {forma.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                        Valor *
+                      </label>
+                      <input
+                        {...compraForm.register(`pagamentos.${index}.valor` as const, { 
+                          required: true,
+                          min: 0.01,
+                          valueAsNumber: true
+                        })}
+                        type="number"
+                        step="0.01"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        placeholder="Valor"
+                        onBlur={(e) => {
+                          const value = parseFloat(e.target.value);
+                          if (!isNaN(value)) {
+                            e.target.value = value.toFixed(2);
+                          }
+                        }}
+                      />
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                        Data Vencimento *
+                      </label>
+                      <input
+                        {...compraForm.register(`pagamentos.${index}.dataVencimento` as const, { required: true })}
+                        type="date"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                        Data Pagamento
+                      </label>
+                      <input
+                        {...compraForm.register(`pagamentos.${index}.dataPagamento` as const)}
+                        type="date"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        placeholder="Data Pagamento (opcional)"
+                      />
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                        Observação
+                      </label>
+                      <input
+                        {...compraForm.register(`pagamentos.${index}.observacao` as const)}
+                        type="text"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        placeholder="Observação (opcional)"
+                      />
+                    </div>
+
+                    {/* Campo de quantidade de parcelas - só aparece para cartão de crédito */}
+                    {compraForm.watch(`pagamentos.${index}.formaPagamento`) === 'CARTAO_CREDITO' && (
+                      <div className="md:col-span-2">
+                        <label className="block text-xs font-medium text-gray-600 mb-1">
+                          Quantidade de Parcelas *
+                        </label>
+                        <input
+                          {...compraForm.register(`pagamentos.${index}.quantidadeParcelas` as const, { 
+                            required: compraForm.watch(`pagamentos.${index}.formaPagamento`) === 'CARTAO_CREDITO',
+                            min: 1,
+                            max: 24,
+                            valueAsNumber: true
+                          })}
+                          type="number"
+                          min="1"
+                          max="24"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          placeholder="Ex: 12"
+                        />
+                      </div>
+                    )}
+
+                    <div className="md:col-span-1 flex items-center justify-end">
+                      {pagamentoFields.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removePagamento(index)}
+                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                          title="Remover pagamento"
+                        >
+                          <Minus className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Resumo dos Valores */}
+            <div className="flex justify-end space-x-4">
+              <div className="bg-gray-50 px-6 py-4 rounded-lg">
                 <p className="text-sm text-gray-600 mb-1">Valor Total da Compra</p>
-                <p className="text-2xl font-bold text-indigo-600">
+                <p className="text-xl font-bold text-gray-900">
                   {formatCurrency(valorTotalCompra)}
                 </p>
+              </div>
+              <div className={`px-6 py-4 rounded-lg ${
+                Math.abs(calcularValorTotalPagamentos() - valorTotalCompra) <= 0.01 
+                  ? 'bg-green-50' 
+                  : 'bg-red-50'
+              }`}>
+                <p className="text-sm text-gray-600 mb-1">Valor Total dos Pagamentos</p>
+                <p className={`text-xl font-bold ${
+                  Math.abs(calcularValorTotalPagamentos() - valorTotalCompra) <= 0.01 
+                    ? 'text-green-600' 
+                    : 'text-red-600'
+                }`}>
+                  {formatCurrency(calcularValorTotalPagamentos())}
+                </p>
+                {Math.abs(calcularValorTotalPagamentos() - valorTotalCompra) > 0.01 && (
+                  <p className="text-xs text-red-600 mt-1">
+                    Os valores devem ser iguais
+                  </p>
+                )}
               </div>
             </div>
 
@@ -462,7 +688,7 @@ export default function ComprasPage() {
               </button>
               <button
                 type="submit"
-                disabled={isLoading}
+                disabled={isLoading || !isFormValid()}
                 className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
               >
                 {isLoading ? 'Registrando...' : 'Registrar Compra'}
@@ -492,7 +718,7 @@ export default function ComprasPage() {
                     Fornecedor
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Forma de Pagamento
+                    Pagamentos
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Qtd. Itens
@@ -530,9 +756,26 @@ export default function ComprasPage() {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center text-sm text-gray-900">
-                          <CreditCard className="h-4 w-4 text-gray-400 mr-2" />
-                          {getFormaPagamentoLabel(compra.formaPagamento)}
+                        <div className="text-sm text-gray-900">
+                          {compra.pagamentos?.length > 0 ? (
+                            <div className="space-y-1">
+                              {compra.pagamentos.slice(0, 2).map((pagamento, index) => (
+                                <div key={index} className="flex items-center">
+                                  <CreditCard className="h-3 w-3 text-gray-400 mr-1" />
+                                  <span className="text-xs">
+                                    {getFormaPagamentoLabel(pagamento.formaPagamento)} - {formatCurrency(pagamento.valor)}
+                                  </span>
+                                </div>
+                              ))}
+                              {compra.pagamentos.length > 2 && (
+                                <div className="text-xs text-gray-500">
+                                  +{compra.pagamentos.length - 2} mais
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-gray-400">N/A</span>
+                          )}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -613,16 +856,16 @@ export default function ComprasPage() {
                   <p className="text-lg font-medium text-gray-900">{compraDetalhes.nomeFornecedor}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-500">Forma de Pagamento</p>
-                  <p className="text-lg font-medium text-gray-900">{getFormaPagamentoLabel(compraDetalhes.formaPagamento)}</p>
-                </div>
-                <div>
                   <p className="text-sm text-gray-500">Usuário</p>
                   <p className="text-lg font-medium text-gray-900">{compraDetalhes.usuario.name}</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-500">Valor Total</p>
                   <p className="text-lg font-bold text-green-600">{formatCurrency(compraDetalhes.valorTotal)}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">Qtd. Pagamentos</p>
+                  <p className="text-lg font-medium text-gray-900">{compraDetalhes.pagamentos?.length || 0}</p>
                 </div>
               </div>
 
@@ -651,6 +894,55 @@ export default function ComprasPage() {
                   </table>
                 </div>
               </div>
+
+              {/* Pagamentos */}
+              {compraDetalhes.pagamentos && compraDetalhes.pagamentos.length > 0 && (
+                <div className="mt-6">
+                  <h4 className="text-lg font-semibold text-gray-900 mb-3">Pagamentos</h4>
+                  <div className="border rounded-lg overflow-hidden">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Forma de Pagamento</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Valor</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vencimento</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pagamento</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {compraDetalhes.pagamentos.map((pagamento) => (
+                          <tr key={pagamento.id}>
+                            <td className="px-4 py-3 text-sm text-gray-900">
+                              {getFormaPagamentoLabel(pagamento.formaPagamento)}
+                            </td>
+                            <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                              {formatCurrency(pagamento.valor)}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-900">
+                              {formatDate(pagamento.dataVencimento)}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-900">
+                              {pagamento.dataPagamento ? formatDate(pagamento.dataPagamento) : '-'}
+                            </td>
+                            <td className="px-4 py-3 text-sm">
+                              <span className={`px-2 py-1 text-xs rounded-full ${
+                                pagamento.status === 'PAGO' 
+                                  ? 'bg-green-100 text-green-800' 
+                                  : pagamento.status === 'VENCIDO'
+                                  ? 'bg-red-100 text-red-800'
+                                  : 'bg-yellow-100 text-yellow-800'
+                              }`}>
+                                {pagamento.status}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
 
               <div className="mt-6 flex justify-end">
                 <button

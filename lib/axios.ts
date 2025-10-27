@@ -1,13 +1,21 @@
 import axios from 'axios';
 import { getSession } from 'next-auth/react';
 
+// Remove trailing slash from API URL
+const API_URL = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') || '';
+
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL,
+  baseURL: API_URL,
 });
 
 api.interceptors.request.use(async (config) => {
-  // TODO: Implementar autenticação por token quando necessário
-  // Por enquanto, removido para evitar erros de TypeScript
+  // Adiciona o token JWT nas requisições
+  const session = await getSession();
+  
+  if (session && (session as any).accessToken) {
+    config.headers.Authorization = `Bearer ${(session as any).accessToken}`;
+  }
+  
   return config;
 });
 
