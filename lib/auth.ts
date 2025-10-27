@@ -15,18 +15,35 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
+          console.error('❌ Missing credentials');
           return null;
         }
 
+        const apiUrl = `${API_URL}/auth/login`;
+
         try {
-          console.log('🔐 Attempting login to:', `${API_URL}/auth/login`);
+          console.log('🔐 Auth Debug:', {
+            apiUrl,
+            API_URL,
+            NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
+            email: credentials.email,
+            hasPassword: !!credentials.password,
+          });
           
-          const response = await axios.post(`${API_URL}/auth/login`, {
+          const response = await axios.post(apiUrl, {
             email: credentials.email,
             password: credentials.password,
+          }, {
+            timeout: 10000,
+            headers: {
+              'Content-Type': 'application/json',
+            },
           });
 
-          console.log('✅ Login successful:', response.data);
+          console.log('✅ Login successful:', {
+            hasToken: !!response.data.access_token,
+            user: response.data.user?.email,
+          });
 
           if (response.data.access_token) {
             return {
@@ -39,14 +56,16 @@ export const authOptions: NextAuthOptions = {
           }
         } catch (error) {
           if (axios.isAxiosError(error)) {
-            console.error('❌ Auth error:', {
-              url: `${API_URL}/auth/login`,
+            console.error('❌ Auth error details:', {
+              url: apiUrl,
               status: error.response?.status,
+              statusText: error.response?.statusText,
               data: error.response?.data,
               message: error.message,
+              code: error.code,
             });
           } else {
-            console.error('❌ Auth error:', error);
+            console.error('❌ Non-axios error:', error);
           }
         }
 
