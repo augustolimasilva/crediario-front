@@ -3,7 +3,12 @@ import CredentialsProvider from 'next-auth/providers/credentials';
 import axios from 'axios';
 
 // Remove trailing slash from API URL
-const API_URL = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') || '';
+// Use internal URL for server-side requests if available (for Docker networking)
+// Fall back to public URL if internal URL is not set
+const API_URL = (
+  process.env.API_URL_INTERNAL || 
+  process.env.NEXT_PUBLIC_API_URL
+)?.replace(/\/$/, '') || '';
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -25,6 +30,7 @@ export const authOptions: NextAuthOptions = {
           console.log('🔐 Auth Debug:', {
             apiUrl,
             API_URL,
+            API_URL_INTERNAL: process.env.API_URL_INTERNAL,
             NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
             email: credentials.email,
             hasPassword: !!credentials.password,
