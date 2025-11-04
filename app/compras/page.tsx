@@ -550,7 +550,7 @@ export default function ComprasPage() {
                                   <div className="flex justify-between items-center">
                                     <span className="text-sm text-gray-800 truncate mr-2">{p.nome}</span>
                                   </div>
-                                  {p.descricao && (
+                                  {(p as any).descricao && (
                                     <div className="text-xs text-gray-500 truncate">{(p as any).descricao}</div>
                                   )}
                                 </button>
