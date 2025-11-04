@@ -11,7 +11,6 @@ import {
   ShoppingCart,
   Package,
   ShoppingBag,
-  TrendingUp,
   ChevronLeft,
   ChevronRight,
   LogOut,
@@ -41,7 +40,6 @@ export default function Sidebar() {
     { title: 'Vendas', icon: ShoppingCart, path: '/vendas' },
     { title: 'Lançamentos', icon: DollarSign, path: '/lancamentos-financeiros' },
     { title: 'Pagamentos de Funcionários', icon: Wallet, path: '/pagamentos-funcionarios' },
-    { title: 'Relatórios', icon: TrendingUp, path: '/relatorios' },
   ];
 
   const isActive = (path: string) => {
