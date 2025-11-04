@@ -104,9 +104,23 @@ function FuncionariosPageContent() {
       }
     } else if (!editId && editingFuncionario) {
       // Se não há mais parâmetro edit na URL e há um funcionário sendo editado, fechar o formulário
-      setShowCreateForm(false);
       setEditingFuncionario(null);
-      funcionarioForm.reset();
+      funcionarioForm.reset({
+        nome: '',
+        telefone: '',
+        cep: '',
+        endereco: '',
+        numero: '',
+        bairro: '',
+        cidade: '',
+        estado: '',
+        pais: '',
+        cpf: '',
+        email: '',
+        cargoId: '',
+        salario: undefined
+      });
+      setShowCreateForm(false);
     }
   }, [searchParams, funcionarios]);
 
@@ -197,8 +211,22 @@ function FuncionariosPageContent() {
 
       if (response.ok) {
         toast.success('Funcionário criado com sucesso!');
+        funcionarioForm.reset({
+          nome: '',
+          telefone: '',
+          cep: '',
+          endereco: '',
+          numero: '',
+          bairro: '',
+          cidade: '',
+          estado: '',
+          pais: '',
+          cpf: '',
+          email: '',
+          cargoId: '',
+          salario: undefined
+        });
         setShowCreateForm(false);
-        funcionarioForm.reset();
         loadFuncionarios();
       } else {
         const responseText = await response.text();
@@ -265,9 +293,23 @@ function FuncionariosPageContent() {
     // Se não houve alterações, apenas fechar o formulário
     if (!hasChanges) {
       toast.info('Nenhuma alteração foi realizada');
-      setShowCreateForm(false);
       setEditingFuncionario(null);
-      funcionarioForm.reset();
+      funcionarioForm.reset({
+        nome: '',
+        telefone: '',
+        cep: '',
+        endereco: '',
+        numero: '',
+        bairro: '',
+        cidade: '',
+        estado: '',
+        pais: '',
+        cpf: '',
+        email: '',
+        cargoId: '',
+        salario: undefined
+      });
+      setShowCreateForm(false);
       router.push('/funcionarios');
       return;
     }
@@ -287,9 +329,23 @@ function FuncionariosPageContent() {
 
       if (response.ok) {
         toast.success('Funcionário atualizado com sucesso!');
-        setShowCreateForm(false);
         setEditingFuncionario(null);
-        funcionarioForm.reset();
+        funcionarioForm.reset({
+          nome: '',
+          telefone: '',
+          cep: '',
+          endereco: '',
+          numero: '',
+          bairro: '',
+          cidade: '',
+          estado: '',
+          pais: '',
+          cpf: '',
+          email: '',
+          cargoId: '',
+          salario: undefined
+        });
+        setShowCreateForm(false);
         loadFuncionarios();
         
         // Remover parâmetro edit da URL
@@ -445,9 +501,23 @@ function FuncionariosPageContent() {
             </button>
             <button
               onClick={() => {
-                setShowCreateForm(true);
                 setEditingFuncionario(null);
-                funcionarioForm.reset();
+                funcionarioForm.reset({
+                  nome: '',
+                  telefone: '',
+                  cep: '',
+                  endereco: '',
+                  numero: '',
+                  bairro: '',
+                  cidade: '',
+                  estado: '',
+                  pais: '',
+                  cpf: '',
+                  email: '',
+                  cargoId: '',
+                  salario: undefined
+                });
+                setShowCreateForm(true);
               }}
               className="flex items-center space-x-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors"
             >
@@ -681,9 +751,23 @@ function FuncionariosPageContent() {
                 <button
                   type="button"
                   onClick={() => {
-                    setShowCreateForm(false);
                     setEditingFuncionario(null);
-                    funcionarioForm.reset();
+                    funcionarioForm.reset({
+                      nome: '',
+                      telefone: '',
+                      cep: '',
+                      endereco: '',
+                      numero: '',
+                      bairro: '',
+                      cidade: '',
+                      estado: '',
+                      pais: '',
+                      cpf: '',
+                      email: '',
+                      cargoId: '',
+                      salario: undefined
+                    });
+                    setShowCreateForm(false);
                   }}
                   className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
                 >
