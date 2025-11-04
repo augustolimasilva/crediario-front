@@ -14,7 +14,9 @@ import {
   TrendingUp,
   ChevronLeft,
   ChevronRight,
-  LogOut
+  LogOut,
+  DollarSign,
+  Wallet
 } from 'lucide-react';
 import { signOut, useSession } from 'next-auth/react';
 
@@ -37,6 +39,8 @@ export default function Sidebar() {
     { title: 'Produtos', icon: Package, path: '/produtos' },
     { title: 'Compras', icon: ShoppingBag, path: '/compras' },
     { title: 'Vendas', icon: ShoppingCart, path: '/vendas' },
+    { title: 'Lançamentos', icon: DollarSign, path: '/lancamentos-financeiros' },
+    { title: 'Pagamentos de Funcionários', icon: Wallet, path: '/pagamentos-funcionarios' },
     { title: 'Relatórios', icon: TrendingUp, path: '/relatorios' },
   ];
 

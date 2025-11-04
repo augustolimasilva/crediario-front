@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState, Suspense } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
+import api from '../../lib/axios';
 import { 
   Package, 
   Plus, 
@@ -16,7 +17,11 @@ import {
   Palette,
   AlertCircle,
   CheckCircle,
-  XCircle
+  XCircle,
+  Search,
+    Eye,
+    ChevronLeft,
+    ChevronRight
 } from 'lucide-react';
 
 interface Produto {
@@ -25,8 +30,10 @@ interface Produto {
   descricao?: string;
   marca?: string;
   cor?: string;
-  nomeFornecedor?: string;
-  valorVenda: number;
+  valor: number;
+  percentualComissao?: number;
+  classificacao?: string;
+  temEstoque: boolean;
   quantidadeMinimaEstoque: number;
   ativo: boolean;
   createdAt: string;
@@ -38,8 +45,10 @@ interface ProdutoForm {
   descricao?: string;
   marca?: string;
   cor?: string;
-  nomeFornecedor?: string;
-  valorVenda: number;
+  valor: number | string;
+  percentualComissao?: number | string;
+  classificacao: string;
+  temEstoque: boolean;
   quantidadeMinimaEstoque: number;
   ativo: boolean;
 }
@@ -49,17 +58,25 @@ function ProdutosPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [produtos, setProdutos] = useState<Produto[]>([]);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(5);
+  const [total, setTotal] = useState(0);
+  const [filteredProdutos, setFilteredProdutos] = useState<Produto[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingProduto, setEditingProduto] = useState<Produto | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [produtoToDelete, setProdutoToDelete] = useState<Produto | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
   const produtoForm = useForm<ProdutoForm>({
     defaultValues: {
       ativo: true,
+      temEstoque: false,
       quantidadeMinimaEstoque: 0,
-      valorVenda: 0
+      valor: '',
+      percentualComissao: '',
+      classificacao: 'PRODUTO_ESTOQUE'
     }
   });
 
@@ -73,7 +90,22 @@ function ProdutosPageContent() {
     if (session) {
       loadProdutos();
     }
-  }, [session]);
+  }, [session, page, pageSize]);
+
+  // Filtrar produtos baseado no termo de busca
+  useEffect(() => {
+    if (!searchTerm.trim()) {
+      setFilteredProdutos(produtos);
+    } else {
+      const filtered = produtos.filter(produto =>
+        produto.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        produto.descricao?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        produto.marca?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        produto.cor?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+      setFilteredProdutos(filtered);
+    }
+  }, [produtos, searchTerm]);
 
   // Detectar parâmetro de edição na URL
   useEffect(() => {
@@ -93,15 +125,11 @@ function ProdutosPageContent() {
   const loadProdutos = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/produto`);
-
-      if (response.ok) {
-        const produtosData = await response.json();
-        setProdutos(produtosData);
-      } else {
-        toast.error('Erro ao carregar produtos');
-      }
+      const response = await api.get('/produto', { params: { page, pageSize } });
+      setProdutos(response.data.data);
+      setTotal(response.data.total);
     } catch (error) {
+      console.error('Erro ao carregar produtos:', error);
       toast.error('Erro ao carregar produtos');
     } finally {
       setIsLoading(false);
@@ -111,29 +139,31 @@ function ProdutosPageContent() {
   const handleCreateProduto = async (data: ProdutoForm) => {
     try {
       setIsLoading(true);
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/produto`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-      });
-
-      if (response.ok) {
-        toast.success('Produto criado com sucesso!');
-        setShowCreateForm(false);
-        produtoForm.reset({
-          ativo: true,
-          quantidadeMinimaEstoque: 0,
-          valorVenda: 0
-        });
-        loadProdutos();
-      } else {
-        const error = await response.json();
-        toast.error(error.message || 'Erro ao criar produto');
+      const payload: any = { ...data };
+      // Normalizar valores
+      if (!payload.temEstoque) {
+        delete payload.quantidadeMinimaEstoque;
+        delete payload.percentualComissao;
       }
-    } catch (error) {
-      toast.error('Erro ao criar produto');
+      if (payload.percentualComissao === '' || isNaN(Number(payload.percentualComissao))) {
+        delete payload.percentualComissao;
+      }
+      if (payload.valor === '' || isNaN(Number(payload.valor))) {
+        payload.valor = 0;
+      }
+      await api.post('/produto', payload);
+      toast.success('Produto criado com sucesso!');
+      setShowCreateForm(false);
+      produtoForm.reset({
+        ativo: true,
+        temEstoque: false,
+        quantidadeMinimaEstoque: 0,
+        valor: ''
+      });
+      loadProdutos();
+    } catch (error: any) {
+      console.error('Erro ao criar produto:', error);
+      toast.error(error.response?.data?.message || 'Erro ao criar produto');
     } finally {
       setIsLoading(false);
     }
@@ -146,8 +176,10 @@ function ProdutosPageContent() {
       descricao: produto.descricao || '',
       marca: produto.marca || '',
       cor: produto.cor || '',
-      nomeFornecedor: produto.nomeFornecedor || '',
-      valorVenda: Number(produto.valorVenda),
+      valor: Number(produto.valor),
+      percentualComissao: typeof produto.percentualComissao === 'number' ? Number(produto.percentualComissao) : ('' as any),
+      classificacao: produto.classificacao || 'PRODUTO_ESTOQUE',
+      temEstoque: produto.temEstoque,
       quantidadeMinimaEstoque: produto.quantidadeMinimaEstoque,
       ativo: produto.ativo
     });
@@ -163,8 +195,10 @@ function ProdutosPageContent() {
       data.descricao !== (editingProduto.descricao || '') ||
       data.marca !== (editingProduto.marca || '') ||
       data.cor !== (editingProduto.cor || '') ||
-      data.nomeFornecedor !== (editingProduto.nomeFornecedor || '') ||
-      Number(data.valorVenda) !== Number(editingProduto.valorVenda) ||
+      Number(data.valor) !== Number(editingProduto.valor) ||
+      (data.classificacao || '') !== (editingProduto as any).classificacao ||
+      (data.percentualComissao !== undefined && Number(data.percentualComissao) !== Number((editingProduto as any).percentualComissao || 0)) ||
+      data.temEstoque !== editingProduto.temEstoque ||
       data.quantidadeMinimaEstoque !== editingProduto.quantidadeMinimaEstoque ||
       data.ativo !== editingProduto.ativo;
 
@@ -179,27 +213,28 @@ function ProdutosPageContent() {
 
     try {
       setIsLoading(true);
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/produto/${editingProduto.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-      });
-
-      if (response.ok) {
-        toast.success('Produto atualizado com sucesso!');
-        setShowCreateForm(false);
-        setEditingProduto(null);
-        produtoForm.reset();
-        loadProdutos();
-        router.push('/produtos');
-      } else {
-        const error = await response.json();
-        toast.error(error.message || 'Erro ao atualizar produto');
+      const payload: any = { ...data };
+      // Normalizar valores para evitar erros no backend/DB
+      if (!payload.temEstoque) {
+        delete payload.quantidadeMinimaEstoque;
+        delete payload.percentualComissao;
       }
-    } catch (error) {
-      toast.error('Erro ao atualizar produto');
+      if (payload.percentualComissao === '' || isNaN(Number(payload.percentualComissao))) {
+        delete payload.percentualComissao;
+      }
+      if (payload.valor === '' || isNaN(Number(payload.valor))) {
+        delete payload.valor;
+      }
+      await api.put(`/produto/${editingProduto.id}`, payload);
+      toast.success('Produto atualizado com sucesso!');
+      setShowCreateForm(false);
+      setEditingProduto(null);
+      produtoForm.reset();
+      loadProdutos();
+      router.push('/produtos');
+    } catch (error: any) {
+      console.error('Erro ao atualizar produto:', error);
+      toast.error(error.response?.data?.message || 'Erro ao atualizar produto');
     } finally {
       setIsLoading(false);
     }
@@ -215,19 +250,12 @@ function ProdutosPageContent() {
 
     try {
       setIsLoading(true);
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/produto/${produtoToDelete.id}`, {
-        method: 'DELETE',
-      });
-
-      if (response.ok) {
-        toast.success('Produto excluído com sucesso!');
-        loadProdutos();
-      } else {
-        const error = await response.json();
-        toast.error(error.message || 'Erro ao excluir produto');
-      }
-    } catch (error) {
-      toast.error('Erro ao excluir produto');
+      await api.delete(`/produto/${produtoToDelete.id}`);
+      toast.success('Produto excluído com sucesso!');
+      loadProdutos();
+    } catch (error: any) {
+      console.error('Erro ao excluir produto:', error);
+      toast.error(error.response?.data?.message || 'Erro ao excluir produto');
     } finally {
       setIsLoading(false);
       setShowDeleteModal(false);
@@ -281,7 +309,7 @@ function ProdutosPageContent() {
             produtoForm.reset({
               ativo: true,
               quantidadeMinimaEstoque: 0,
-              valorVenda: 0
+              valor: ''
             });
           }}
           className="flex items-center space-x-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors"
@@ -355,57 +383,108 @@ function ProdutosPageContent() {
               />
             </div>
 
-            {/* Valor e Estoque */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Valor */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Valor (R$) *
+              </label>
+              <input
+                {...produtoForm.register('valor', {
+                  required: 'Valor é obrigatório',
+                  min: { value: 0, message: 'Valor não pode ser negativo' },
+                  valueAsNumber: true
+                })}
+                type="number"
+                step="0.01"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                placeholder="0.00"
+                onBlur={(e) => {
+                  const value = parseFloat(e.target.value);
+                  if (!isNaN(value)) {
+                    e.target.value = value.toFixed(2);
+                  }
+                }}
+              />
+              {produtoForm.formState.errors.valor && (
+                <p className="mt-1 text-sm text-red-600">
+                  {produtoForm.formState.errors.valor.message}
+                </p>
+              )}
+            </div>
+
+            {/* Classificação e Controle de Estoque */}
+            <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Valor de Venda (R$) *
+                  Classificação
                 </label>
-                <input
-                  {...produtoForm.register('valorVenda', {
-                    required: 'Valor de venda é obrigatório',
-                    min: { value: 0, message: 'Valor não pode ser negativo' },
-                    valueAsNumber: true
-                  })}
-                  type="number"
-                  step="0.01"
+                <select
+                  {...produtoForm.register('classificacao', { required: 'Classificação é obrigatória' })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="0.00"
-                  onBlur={(e) => {
-                    const value = parseFloat(e.target.value);
-                    if (!isNaN(value)) {
-                      e.target.value = value.toFixed(2);
-                    }
-                  }}
+                >
+                  <option value="PRODUTO_ESTOQUE">Produto de estoque</option>
+                  <option value="ATIVO_IMOBILIZADO">Ativo imobilizado</option>
+                  <option value="SERVICO">Serviço</option>
+                  <option value="MATERIAL_CONSUMO">Material de consumo</option>
+                </select>
+              </div>
+              <div className="flex items-center space-x-3">
+                <input
+                  {...produtoForm.register('temEstoque')}
+                  type="checkbox"
+                  id="temEstoque"
+                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
                 />
-                {produtoForm.formState.errors.valorVenda && (
-                  <p className="mt-1 text-sm text-red-600">
-                    {produtoForm.formState.errors.valorVenda.message}
-                  </p>
-                )}
+                <label htmlFor="temEstoque" className="text-sm font-medium text-gray-700">
+                  Produto tem controle de estoque
+                </label>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Quantidade Mínima de Estoque (0-100) *
-                </label>
-                <input
-                  {...produtoForm.register('quantidadeMinimaEstoque', {
-                    required: 'Quantidade mínima é obrigatória',
-                    min: { value: 0, message: 'Mínimo é 0' },
-                    max: { value: 100, message: 'Máximo é 100' },
-                    valueAsNumber: true
-                  })}
-                  type="number"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="0"
-                />
-                {produtoForm.formState.errors.quantidadeMinimaEstoque && (
-                  <p className="mt-1 text-sm text-red-600">
-                    {produtoForm.formState.errors.quantidadeMinimaEstoque.message}
-                  </p>
-                )}
-              </div>
+              {produtoForm.watch('temEstoque') && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Quantidade Mínima de Estoque (0-100) *
+                  </label>
+                  <input
+                    {...produtoForm.register('quantidadeMinimaEstoque', {
+                      required: produtoForm.watch('temEstoque') ? 'Quantidade mínima é obrigatória quando tem estoque' : false,
+                      min: { value: 0, message: 'Mínimo é 0' },
+                      max: { value: 100, message: 'Máximo é 100' },
+                      valueAsNumber: true
+                    })}
+                    type="number"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="0"
+                  />
+                  {produtoForm.formState.errors.quantidadeMinimaEstoque && (
+                    <p className="mt-1 text-sm text-red-600">
+                      {produtoForm.formState.errors.quantidadeMinimaEstoque.message}
+                    </p>
+                  )}
+                  <div className="mt-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Percentual de Comissão (%)
+                    </label>
+                    <div className="relative">
+                      <input
+                        {...produtoForm.register('percentualComissao', { valueAsNumber: true })}
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        className="w-full pr-10 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        placeholder="0,00"
+                        onBlur={(e) => {
+                          const value = parseFloat(e.target.value);
+                          if (!isNaN(value)) {
+                            e.target.value = value.toFixed(2);
+                          }
+                        }}
+                      />
+                      <span className="absolute inset-y-0 right-3 flex items-center text-gray-500 text-sm">%</span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Status Ativo */}
@@ -448,9 +527,31 @@ function ProdutosPageContent() {
       {!showCreateForm && (
         <div className="bg-white rounded-lg shadow">
           <div className="px-6 py-4 border-b border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900">
-              Lista de Produtos ({produtos.length})
-            </h3>
+            <div className="flex justify-between items-center">
+              <h3 className="text-lg font-semibold text-gray-900">
+                Lista de Produtos ({total})
+              </h3>
+              <div className="flex items-center space-x-2">
+                <div className="relative">
+                  <Search className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Buscar produtos..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 w-64"
+                  />
+                </div>
+                {searchTerm && (
+                  <button
+                    onClick={() => setSearchTerm('')}
+                    className="px-3 py-2 text-sm text-gray-600 hover:text-gray-900 transition-colors"
+                  >
+                    Limpar
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
           
           <div className="overflow-x-auto">
@@ -478,14 +579,14 @@ function ProdutosPageContent() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {produtos.length === 0 && !isLoading ? (
+                {filteredProdutos.length === 0 && !isLoading ? (
                   <tr>
                     <td colSpan={6} className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">
-                      Nenhum produto encontrado.
+                      {searchTerm ? 'Nenhum produto encontrado para a busca.' : 'Nenhum produto encontrado.'}
                     </td>
                   </tr>
                 ) : (
-                  produtos.map((produto) => (
+                  filteredProdutos.map((produto) => (
                     <tr key={produto.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
@@ -523,7 +624,7 @@ function ProdutosPageContent() {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center text-sm font-medium text-green-600">
                           <DollarSign className="h-4 w-4 mr-1" />
-                          {formatCurrency(produto.valorVenda)}
+                          {formatCurrency(produto.valor)}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -548,6 +649,13 @@ function ProdutosPageContent() {
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <div className="flex space-x-2">
                           <button
+                            onClick={() => router.push(`/produtos/${produto.id}`)}
+                            className="text-blue-600 hover:text-blue-900"
+                            title="Ver detalhes"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </button>
+                          <button
                             onClick={() => handleEditProduto(produto)}
                             className="text-indigo-600 hover:text-indigo-900"
                             title="Editar"
@@ -568,7 +676,46 @@ function ProdutosPageContent() {
                 )}
               </tbody>
             </table>
+        </div>
+        <div className="px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-gray-600">Por página:</span>
+            <select
+              value={pageSize}
+              onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+              className="border border-gray-300 rounded px-2 py-1 text-sm"
+            >
+              <option value={5}>5</option>
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
           </div>
+          <div className="text-sm text-gray-600">
+            Página {page} de {Math.max(1, Math.ceil(total / pageSize))}
+          </div>
+          <div className="inline-flex items-center gap-2">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="inline-flex items-center gap-1 px-3 py-2 rounded-full border text-sm shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-label="Página anterior"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              <span>Anterior</span>
+            </button>
+            <button
+              onClick={() => setPage((p) => p + 1)}
+              disabled={page >= Math.ceil(total / pageSize)}
+              className="inline-flex items-center gap-1 px-3 py-2 rounded-full border text-sm shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-label="Próxima página"
+            >
+              <span>Próxima</span>
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
         </div>
       )}
 

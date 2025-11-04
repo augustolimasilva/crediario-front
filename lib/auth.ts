@@ -15,11 +15,11 @@ export const authOptions: NextAuthOptions = {
     CredentialsProvider({
       name: 'credentials',
       credentials: {
-        email: { label: 'Email', type: 'email' },
+        usuario: { label: 'Usuário', type: 'text' },
         password: { label: 'Password', type: 'password' },
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) {
+        if (!credentials?.usuario || !credentials?.password) {
           console.error('❌ Missing credentials');
           return null;
         }
@@ -32,12 +32,12 @@ export const authOptions: NextAuthOptions = {
             API_URL,
             API_URL_INTERNAL: process.env.API_URL_INTERNAL,
             NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
-            email: credentials.email,
+            usuario: credentials.usuario,
             hasPassword: !!credentials.password,
           });
           
           const response = await axios.post(apiUrl, {
-            email: credentials.email,
+            usuario: credentials.usuario,
             password: credentials.password,
           }, {
             timeout: 10000,
@@ -48,13 +48,13 @@ export const authOptions: NextAuthOptions = {
 
           console.log('✅ Login successful:', {
             hasToken: !!response.data.access_token,
-            user: response.data.user?.email,
+            user: response.data.user?.usuario,
           });
 
           if (response.data.access_token) {
             return {
               id: response.data.user.id,
-              email: response.data.user.email,
+              email: response.data.user.usuario,
               name: response.data.user.name,
               image: response.data.user.avatar || response.data.user.image,
               accessToken: response.data.access_token,

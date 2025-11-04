@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
+import api from '../../lib/axios';
 import { 
   Briefcase, 
   Plus, 
@@ -12,7 +13,9 @@ import {
   Trash2, 
   ArrowLeft,
   LogOut,
-  User
+  User,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 
 interface Cargo {
@@ -30,6 +33,9 @@ export default function CargosPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [cargos, setCargos] = useState<Cargo[]>([]);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(5);
+  const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingCargo, setEditingCargo] = useState<Cargo | null>(null);
@@ -48,20 +54,16 @@ export default function CargosPage() {
     if (session) {
       loadCargos();
     }
-  }, [session]);
+  }, [session, page, pageSize]);
 
   const loadCargos = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/cargo`);
-
-      if (response.ok) {
-        const cargosData = await response.json();
-        setCargos(cargosData);
-      } else {
-        toast.error('Erro ao carregar cargos');
-      }
+      const response = await api.get('/cargo', { params: { page, pageSize } });
+      setCargos(response.data.data);
+      setTotal(response.data.total);
     } catch (error) {
+      console.error('Erro ao carregar cargos:', error);
       toast.error('Erro ao carregar cargos');
     } finally {
       setIsLoading(false);
@@ -71,25 +73,14 @@ export default function CargosPage() {
   const handleCreateCargo = async (data: CargoForm) => {
     try {
       setIsLoading(true);
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/cargo`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-      });
-
-      if (response.ok) {
-        toast.success('Cargo criado com sucesso!');
-        setShowCreateForm(false);
-        cargoForm.reset();
-        loadCargos();
-      } else {
-        const error = await response.json();
-        toast.error(error.message || 'Erro ao criar cargo');
-      }
-    } catch (error) {
-      toast.error('Erro ao criar cargo');
+      await api.post('/cargo', data);
+      toast.success('Cargo criado com sucesso!');
+      setShowCreateForm(false);
+      cargoForm.reset();
+      loadCargos();
+    } catch (error: any) {
+      console.error('Erro ao criar cargo:', error);
+      toast.error(error.response?.data?.message || 'Erro ao criar cargo');
     } finally {
       setIsLoading(false);
     }
@@ -108,26 +99,15 @@ export default function CargosPage() {
 
     try {
       setIsLoading(true);
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/cargo/${editingCargo.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-      });
-
-      if (response.ok) {
-        toast.success('Cargo atualizado com sucesso!');
-        setShowCreateForm(false);
-        setEditingCargo(null);
-        cargoForm.reset();
-        loadCargos();
-      } else {
-        const error = await response.json();
-        toast.error(error.message || 'Erro ao atualizar cargo');
-      }
-    } catch (error) {
-      toast.error('Erro ao atualizar cargo');
+      await api.put(`/cargo/${editingCargo.id}`, data);
+      toast.success('Cargo atualizado com sucesso!');
+      setShowCreateForm(false);
+      setEditingCargo(null);
+      cargoForm.reset();
+      loadCargos();
+    } catch (error: any) {
+      console.error('Erro ao atualizar cargo:', error);
+      toast.error(error.response?.data?.message || 'Erro ao atualizar cargo');
     } finally {
       setIsLoading(false);
     }
@@ -143,19 +123,12 @@ export default function CargosPage() {
 
     try {
       setIsLoading(true);
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/cargo/${cargoToDelete.id}`, {
-        method: 'DELETE',
-      });
-
-      if (response.ok) {
-        toast.success('Cargo excluído com sucesso!');
-        loadCargos();
-      } else {
-        const error = await response.json();
-        toast.error(error.message || 'Erro ao excluir cargo');
-      }
-    } catch (error) {
-      toast.error('Erro ao excluir cargo');
+      await api.delete(`/cargo/${cargoToDelete.id}`);
+      toast.success('Cargo excluído com sucesso!');
+      loadCargos();
+    } catch (error: any) {
+      console.error('Erro ao excluir cargo:', error);
+      toast.error(error.response?.data?.message || 'Erro ao excluir cargo');
     } finally {
       setIsLoading(false);
       setShowDeleteModal(false);
@@ -315,10 +288,11 @@ export default function CargosPage() {
         {/* Cargos List */}
         {!showCreateForm && (
           <div className="bg-white rounded-lg shadow">
-            <div className="px-6 py-4 border-b border-gray-200">
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
               <h3 className="text-lg font-semibold text-gray-900">
-                Lista de Cargos ({cargos.length})
+                Lista de Cargos ({total})
               </h3>
+              
             </div>
           
           <div className="overflow-x-auto">
@@ -367,7 +341,46 @@ export default function CargosPage() {
                 ))}
               </tbody>
             </table>
+        </div>
+        <div className="px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-gray-600">Por página:</span>
+            <select
+              value={pageSize}
+              onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+              className="border border-gray-300 rounded px-2 py-1 text-sm"
+            >
+              <option value={5}>5</option>
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
           </div>
+          <div className="text-sm text-gray-600">
+            Página {page} de {Math.max(1, Math.ceil(total / pageSize))}
+          </div>
+          <div className="inline-flex items-center gap-2">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="inline-flex items-center gap-1 px-3 py-2 rounded-full border text-sm shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-label="Página anterior"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              <span>Anterior</span>
+            </button>
+            <button
+              onClick={() => setPage((p) => p + 1)}
+              disabled={page >= Math.ceil(total / pageSize)}
+              className="inline-flex items-center gap-1 px-3 py-2 rounded-full border text-sm shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-label="Próxima página"
+            >
+              <span>Próxima</span>
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
         </div>
         )}
       </main>

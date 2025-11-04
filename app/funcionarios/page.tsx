@@ -19,7 +19,9 @@ import {
   CreditCard,
   Percent,
   History,
-  Eye
+  Eye,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 
 interface Cargo {
@@ -40,6 +42,7 @@ interface Funcionario {
   pais?: string;
   cpf?: string;
   email?: string;
+  salario?: number;
   cargo: Cargo;
   createdAt: string;
   updatedAt: string;
@@ -58,6 +61,7 @@ interface FuncionarioForm {
   cpf?: string;
   email?: string;
   cargoId: string;
+  salario?: number;
 }
 
 function FuncionariosPageContent() {
@@ -65,6 +69,9 @@ function FuncionariosPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [funcionarios, setFuncionarios] = useState<Funcionario[]>([]);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(5);
+  const [total, setTotal] = useState(0);
   const [cargos, setCargos] = useState<Cargo[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -85,7 +92,7 @@ function FuncionariosPageContent() {
       loadFuncionarios();
       loadCargos();
     }
-  }, [session]);
+  }, [session, page, pageSize]);
 
   // Detectar parâmetro de edição na URL
   useEffect(() => {
@@ -106,11 +113,11 @@ function FuncionariosPageContent() {
   const loadFuncionarios = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/funcionario`);
-
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/funcionario?page=${page}&pageSize=${pageSize}`);
       if (response.ok) {
-        const funcionariosData = await response.json();
-        setFuncionarios(funcionariosData);
+        const payload = await response.json();
+        setFuncionarios(payload.data);
+        setTotal(payload.total);
       } else {
         toast.error('Erro ao carregar funcionários');
       }
@@ -127,7 +134,7 @@ function FuncionariosPageContent() {
 
       if (response.ok) {
         const cargosData = await response.json();
-        setCargos(cargosData);
+        setCargos(cargosData.data || cargosData);
       } else {
         toast.error('Erro ao carregar cargos');
       }
@@ -179,6 +186,7 @@ function FuncionariosPageContent() {
   const handleCreateFuncionario = async (data: FuncionarioForm) => {
     try {
       setIsLoading(true);
+      
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/funcionario`, {
         method: 'POST',
         headers: {
@@ -193,10 +201,22 @@ function FuncionariosPageContent() {
         funcionarioForm.reset();
         loadFuncionarios();
       } else {
-        const error = await response.json();
+        const responseText = await response.text();
+        console.error('Status HTTP:', response.status);
+        console.error('Texto da resposta:', responseText);
+        
+        let error;
+        try {
+          error = JSON.parse(responseText);
+        } catch {
+          error = { message: responseText || 'Erro ao criar funcionário' };
+        }
+        
+        console.error('Erro do servidor:', error);
         toast.error(error.message || 'Erro ao criar funcionário');
       }
     } catch (error) {
+      console.error('Erro ao criar funcionário:', error);
       toast.error('Erro ao criar funcionário');
     } finally {
       setIsLoading(false);
@@ -217,7 +237,8 @@ function FuncionariosPageContent() {
       pais: funcionario.pais || '',
       cpf: funcionario.cpf || '',
       email: funcionario.email || '',
-      cargoId: funcionario.cargo.id
+      cargoId: funcionario.cargo.id,
+      salario: funcionario.salario || undefined
     });
     setShowCreateForm(true);
   };
@@ -238,7 +259,8 @@ function FuncionariosPageContent() {
       data.pais !== (editingFuncionario.pais || '') ||
       data.cpf !== (editingFuncionario.cpf || '') ||
       data.email !== (editingFuncionario.email || '') ||
-      data.cargoId !== editingFuncionario.cargo?.id;
+      data.cargoId !== editingFuncionario.cargo?.id ||
+      Number(data.salario || 0) !== Number(editingFuncionario.salario || 0);
 
     // Se não houve alterações, apenas fechar o formulário
     if (!hasChanges) {
@@ -252,7 +274,10 @@ function FuncionariosPageContent() {
 
     try {
       setIsLoading(true);
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/funcionario/${editingFuncionario.id}`, {
+      
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      
+      const response = await fetch(`${API_URL}/funcionario/${editingFuncionario.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -270,10 +295,22 @@ function FuncionariosPageContent() {
         // Remover parâmetro edit da URL
         router.push('/funcionarios');
       } else {
-        const error = await response.json();
+        const responseText = await response.text();
+        console.error('Status HTTP (update):', response.status);
+        console.error('Texto da resposta (update):', responseText);
+        
+        let error;
+        try {
+          error = JSON.parse(responseText);
+        } catch {
+          error = { message: responseText || 'Erro ao atualizar funcionário' };
+        }
+        
+        console.error('Erro do servidor (update):', error);
         toast.error(error.message || 'Erro ao atualizar funcionário');
       }
     } catch (error) {
+      console.error('Erro ao atualizar funcionário:', error);
       toast.error('Erro ao atualizar funcionário');
     } finally {
       setIsLoading(false);
@@ -623,6 +660,23 @@ function FuncionariosPageContent() {
                 )}
               </div>
 
+              {/* Salário */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Salário
+                </label>
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-600 text-sm">R$</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    {...funcionarioForm.register('salario')}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="0.00"
+                  />
+                </div>
+              </div>
+
               <div className="flex justify-end space-x-3">
                 <button
                   type="button"
@@ -652,7 +706,7 @@ function FuncionariosPageContent() {
           <div className="bg-white rounded-lg shadow">
             <div className="px-6 py-4 border-b border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900">
-                Lista de Funcionários ({funcionarios.length})
+                Lista de Funcionários ({total})
               </h3>
             </div>
           
@@ -694,7 +748,7 @@ function FuncionariosPageContent() {
                               {formatCPF(funcionario.cpf)}
                             </div>
                           )}
-                        </div>
+        </div>
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -774,6 +828,45 @@ function FuncionariosPageContent() {
               </tbody>
             </table>
           </div>
+        <div className="px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-gray-600">Por página:</span>
+            <select
+              value={pageSize}
+              onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+              className="border border-gray-300 rounded px-2 py-1 text-sm"
+            >
+              <option value={5}>5</option>
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+          </div>
+          <div className="text-sm text-gray-600">
+            Página {page} de {Math.max(1, Math.ceil(total / pageSize))}
+          </div>
+          <div className="inline-flex items-center gap-2">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="inline-flex items-center gap-1 px-3 py-2 rounded-full border text-sm shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-label="Página anterior"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              <span>Anterior</span>
+            </button>
+            <button
+              onClick={() => setPage((p) => p + 1)}
+              disabled={page >= Math.ceil(total / pageSize)}
+              className="inline-flex items-center gap-1 px-3 py-2 rounded-full border text-sm shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-label="Próxima página"
+            >
+              <span>Próxima</span>
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
         </div>
         )}
       </main>

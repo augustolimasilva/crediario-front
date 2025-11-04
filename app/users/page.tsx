@@ -22,14 +22,14 @@ import {
 interface User {
   id: string;
   name: string;
-  email: string;
+  usuario: string;
   isActive: boolean;
   createdAt: string;
 }
 
 interface UserForm {
   name: string;
-  email: string;
+  usuario: string;
   password: string;
   isActive?: boolean;
 }
@@ -38,6 +38,9 @@ export default function UsersPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [users, setUsers] = useState<User[]>([]);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(5);
+  const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -57,16 +60,16 @@ export default function UsersPage() {
     if (session) {
       loadUsers();
     }
-  }, [session]);
+  }, [session, page, pageSize]);
 
   const loadUsers = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/user`);
-
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/user?page=${page}&pageSize=${pageSize}`);
       if (response.ok) {
-        const usersData = await response.json();
-        setUsers(usersData);
+        const payload = await response.json();
+        setUsers(payload.data);
+        setTotal(payload.total);
       } else {
         toast.error('Erro ao carregar usuários');
       }
@@ -112,7 +115,7 @@ export default function UsersPage() {
     setEditingUser(user);
     userForm.reset({
       name: user.name,
-      email: user.email,
+      usuario: user.usuario,
       password: '',
       isActive: user.isActive
     });
@@ -307,23 +310,20 @@ export default function UsersPage() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Email
+                    Usuário
                   </label>
                   <input
-                    {...userForm.register('email', { 
-                      required: 'Email é obrigatório',
-                      pattern: {
-                        value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                        message: 'Email inválido'
-                      }
+                    {...userForm.register('usuario', { 
+                      required: 'Usuário é obrigatório',
+                      minLength: { value: 3, message: 'Usuário deve ter pelo menos 3 caracteres' }
                     })}
-                    type="email"
+                    type="text"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    placeholder="email@exemplo.com"
+                    placeholder="nome_usuario"
                   />
-                  {userForm.formState.errors.email && (
+                  {userForm.formState.errors.usuario && (
                     <p className="mt-1 text-sm text-red-600">
-                      {userForm.formState.errors.email.message}
+                      {userForm.formState.errors.usuario.message}
                     </p>
                   )}
                 </div>
@@ -402,7 +402,7 @@ export default function UsersPage() {
           <div className="bg-white rounded-lg shadow">
             <div className="px-6 py-4 border-b border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900">
-                Lista de Usuários ({users.length})
+                Lista de Usuários ({total})
               </h3>
             </div>
           
@@ -411,10 +411,10 @@ export default function UsersPage() {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Usuário
+                    Nome
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Email
+                    Usuário
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Status
@@ -443,7 +443,7 @@ export default function UsersPage() {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{user.email}</div>
+                      <div className="text-sm text-gray-900">{user.usuario}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
@@ -478,6 +478,41 @@ export default function UsersPage() {
               </tbody>
             </table>
           </div>
+          <div className="px-6 py-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-gray-600">Por página:</span>
+              <select
+                value={pageSize}
+                onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+                className="border border-gray-300 rounded px-2 py-1 text-sm"
+              >
+                <option value={5}>5</option>
+                <option value={10}>10</option>
+                <option value={20}>20</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+            </div>
+            <div className="text-sm text-gray-600">
+              Página {page} de {Math.max(1, Math.ceil(total / pageSize))}
+            </div>
+            <div className="inline-flex items-center gap-2">
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                className="px-3 py-1 border rounded disabled:opacity-50"
+              >
+                Anterior
+              </button>
+              <button
+                onClick={() => setPage((p) => p + 1)}
+                disabled={page >= Math.ceil(total / pageSize)}
+                className="px-3 py-1 border rounded disabled:opacity-50"
+              >
+                Próxima
+              </button>
+            </div>
+          </div>
         </div>
         )}
       </main>
@@ -509,7 +544,7 @@ export default function UsersPage() {
                   <span className="font-semibold text-gray-900">{userToDelete.name}</span>?
                 </p>
                 <p className="text-sm text-gray-500 mt-2">
-                  Email: {userToDelete.email}
+                  Usuário: {userToDelete.usuario}
                 </p>
               </div>
 

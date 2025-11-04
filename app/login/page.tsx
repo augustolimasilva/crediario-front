@@ -5,10 +5,10 @@ import { signIn, getSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
-import { Eye, EyeOff, Mail, Lock } from 'lucide-react';
+import { Eye, EyeOff, User, Lock } from 'lucide-react';
 
 interface LoginForm {
-  email: string;
+  usuario: string;
   password: string;
 }
 
@@ -24,7 +24,7 @@ export default function LoginPage() {
     setIsLoading(true);
     try {
       const result = await signIn('credentials', {
-        email: data.email,
+        usuario: data.usuario,
         password: data.password,
         redirect: false,
       });
@@ -60,21 +60,24 @@ export default function LoginPage() {
           <div className="mt-8">
             <form onSubmit={loginForm.handleSubmit(handleLogin)} className="mt-6 space-y-4">
                 <div>
-                  <label htmlFor="email" className="sr-only">
-                    Email
+                  <label htmlFor="usuario" className="sr-only">
+                    Usuário
                   </label>
                   <div className="relative">
-                    <Mail className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+                    <User className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
                     <input
-                      {...loginForm.register('email', { required: 'Email é obrigatório' })}
-                      type="email"
+                      {...loginForm.register('usuario', { 
+                        required: 'Usuário é obrigatório',
+                        minLength: { value: 3, message: 'Usuário deve ter pelo menos 3 caracteres' }
+                      })}
+                      type="text"
                       className="pl-10 w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                      placeholder="Seu email"
+                      placeholder="Seu usuário"
                     />
                   </div>
-                  {loginForm.formState.errors.email && (
+                  {loginForm.formState.errors.usuario && (
                     <p className="mt-1 text-sm text-red-600">
-                      {loginForm.formState.errors.email.message}
+                      {loginForm.formState.errors.usuario.message}
                     </p>
                   )}
                 </div>

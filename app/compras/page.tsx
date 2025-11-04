@@ -1,7 +1,16 @@
 'use client';
 
 import { useSession } from 'next-auth/react';
+
+interface ExtendedSession {
+  user?: {
+    id?: string;
+    name?: string;
+    email?: string;
+  };
+}
 import { useRouter } from 'next/navigation';
+import api from '../../lib/axios';
 import { useEffect, useState } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { toast } from 'sonner';
@@ -15,24 +24,26 @@ import {
   CreditCard,
   Package,
   Minus,
-  Eye
+  Eye,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 
 interface Produto {
   id: string;
   nome: string;
-  valorVenda: number;
+  valor: number;
 }
 
 interface CompraItem {
   produtoId: string;
   quantidade: number;
-  valorUnitario: number;
+  valorUnitario: number | string;
 }
 
 interface CompraPagamento {
   formaPagamento: string;
-  valor: number;
+  valor: number | string;
   dataVencimento: string;
   dataPagamento?: string;
   quantidadeParcelas?: number;
@@ -42,6 +53,7 @@ interface CompraPagamento {
 interface CompraForm {
   nomeFornecedor: string;
   dataCompra: string;
+  desconto?: number;
   itens: CompraItem[];
   pagamentos: CompraPagamento[];
 }
@@ -82,23 +94,32 @@ const formasPagamento = [
 ];
 
 export default function ComprasPage() {
-  const { data: session, status } = useSession();
+  const { data: session, status } = useSession() as { data: ExtendedSession | null; status: string };
   const router = useRouter();
   const [compras, setCompras] = useState<Compra[]>([]);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(5);
+  const [total, setTotal] = useState(0);
   const [produtos, setProdutos] = useState<Produto[]>([]);
+  const [produtoSearch, setProdutoSearch] = useState<string[]>([]);
+  const [openSuggest, setOpenSuggest] = useState<boolean[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [compraToDelete, setCompraToDelete] = useState<Compra | null>(null);
   const [showDetalhesModal, setShowDetalhesModal] = useState(false);
   const [compraDetalhes, setCompraDetalhes] = useState<Compra | null>(null);
+  const [filtroDataInicio, setFiltroDataInicio] = useState('');
+  const [filtroDataFim, setFiltroDataFim] = useState('');
+  const [filtroFornecedor, setFiltroFornecedor] = useState('');
+  const [comprasFiltradas, setComprasFiltradas] = useState<Compra[]>([]);
 
   const compraForm = useForm<CompraForm>({
     defaultValues: {
       nomeFornecedor: '',
       dataCompra: new Date().toISOString().split('T')[0],
-      itens: [{ produtoId: '', quantidade: 1, valorUnitario: 0 }],
-      pagamentos: [{ formaPagamento: 'PIX', valor: 0, dataVencimento: new Date().toISOString().split('T')[0] }],
+      itens: [{ produtoId: '', quantidade: 1, valorUnitario: '' }],
+      pagamentos: [{ formaPagamento: 'PIX', valor: '', dataVencimento: new Date().toISOString().split('T')[0] }],
     },
   });
 
@@ -123,19 +144,39 @@ export default function ComprasPage() {
       loadCompras();
       loadProdutos();
     }
-  }, [session]);
+  }, [session, page, pageSize]);
+
+  // Aplicar filtros
+  useEffect(() => {
+    let filtered = compras;
+
+    if (filtroDataInicio) {
+      filtered = filtered.filter(compra => 
+        new Date(compra.dataCompra) >= new Date(filtroDataInicio)
+      );
+    }
+
+    if (filtroDataFim) {
+      filtered = filtered.filter(compra => 
+        new Date(compra.dataCompra) <= new Date(filtroDataFim)
+      );
+    }
+
+    if (filtroFornecedor) {
+      filtered = filtered.filter(compra => 
+        compra.nomeFornecedor.toLowerCase().includes(filtroFornecedor.toLowerCase())
+      );
+    }
+
+    setComprasFiltradas(filtered);
+  }, [compras, filtroDataInicio, filtroDataFim, filtroFornecedor]);
 
   const loadCompras = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/compra`);
-
-      if (response.ok) {
-        const comprasData = await response.json();
-        setCompras(comprasData);
-      } else {
-        toast.error('Erro ao carregar compras');
-      }
+      const { data } = await api.get('/compra', { params: { page, pageSize } });
+      setCompras(data.data);
+      setTotal(data.total);
     } catch (error) {
       toast.error('Erro ao carregar compras');
     } finally {
@@ -145,38 +186,40 @@ export default function ComprasPage() {
 
   const loadProdutos = async () => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/produto`);
-
-      if (response.ok) {
-        const produtosData = await response.json();
-        setProdutos(produtosData.filter((p: Produto & { ativo: boolean }) => p.ativo));
-      }
+      const { data } = await api.get('/produto', { params: { page: 1, pageSize: 1000 } });
+      setProdutos((data.data as Array<Produto & { ativo: boolean }>).filter((p) => (p as any).ativo));
     } catch (error) {
-      console.error('Erro ao carregar produtos');
+      console.error('Erro ao carregar produtos', error);
+      toast.error('Erro ao carregar produtos');
     }
   };
 
   const calcularValorTotal = () => {
     const itens = compraForm.watch('itens');
     return itens.reduce((total, item) => {
-      return total + (item.quantidade * item.valorUnitario);
+      const quantidade = Number(item.quantidade) || 0;
+      const valorUnitario = Number(item.valorUnitario) || 0;
+      return total + (quantidade * valorUnitario);
     }, 0);
   };
 
   const calcularValorTotalPagamentos = () => {
     const pagamentos = compraForm.watch('pagamentos');
     return pagamentos.reduce((total, pagamento) => {
-      return total + (pagamento.valor || 0);
+      const valor = Number(pagamento.valor) || 0;
+      return total + valor;
     }, 0);
   };
 
   const isFormValid = () => {
     const valorTotalItens = calcularValorTotal();
+    const desconto = Number(compraForm.watch('desconto') || 0);
+    const valorTotalCompra = Math.max(0, valorTotalItens - desconto);
     const valorTotalPagamentos = calcularValorTotalPagamentos();
     const pagamentos = compraForm.watch('pagamentos');
     
-    // Verificar se os valores coincidem (com tolerância de 0.01)
-    const valoresCoincidem = Math.abs(valorTotalPagamentos - valorTotalItens) <= 0.01;
+    // Verificar se os valores coincidem (com tolerância de 0.01) - USANDO VALOR COM DESCONTO
+    const valoresCoincidem = Math.abs(valorTotalPagamentos - valorTotalCompra) <= 0.01;
     
     // Verificar se há pelo menos um pagamento
     const temPagamentos = pagamentos.length > 0;
@@ -184,12 +227,12 @@ export default function ComprasPage() {
     // Verificar se todos os pagamentos têm dados válidos
     const pagamentosValidos = pagamentos.every(pagamento => {
       const temFormaPagamento = pagamento.formaPagamento && pagamento.formaPagamento !== '';
-      const temValor = pagamento.valor && pagamento.valor > 0;
+      const temValor = pagamento.valor && Number(pagamento.valor) > 0;
       const temDataVencimento = pagamento.dataVencimento && pagamento.dataVencimento !== '';
       
       // Se for cartão de crédito, verificar se tem quantidade de parcelas
       const temParcelas = pagamento.formaPagamento !== 'CARTAO_CREDITO' || 
-                         (pagamento.quantidadeParcelas && pagamento.quantidadeParcelas > 0);
+                         (pagamento.quantidadeParcelas && Number(pagamento.quantidadeParcelas) > 0);
       
       return temFormaPagamento && temValor && temDataVencimento && temParcelas;
     });
@@ -198,6 +241,11 @@ export default function ComprasPage() {
   };
 
   const handleCreateCompra = async (data: CompraForm) => {
+    if (!session?.user?.id) {
+      toast.error('Usuário não autenticado');
+      return;
+    }
+
     if (data.itens.length === 0) {
       toast.error('Adicione pelo menos um produto');
       return;
@@ -214,11 +262,11 @@ export default function ComprasPage() {
         toast.error('Selecione todos os produtos');
         return;
       }
-      if (item.quantidade <= 0) {
+      if (Number(item.quantidade) <= 0) {
         toast.error('Quantidade deve ser maior que zero');
         return;
       }
-      if (item.valorUnitario <= 0) {
+      if (Number(item.valorUnitario) <= 0) {
         toast.error('Valor unitário deve ser maior que zero');
         return;
       }
@@ -230,7 +278,7 @@ export default function ComprasPage() {
         toast.error('Selecione a forma de pagamento para todos os pagamentos');
         return;
       }
-      if (pagamento.valor <= 0) {
+      if (Number(pagamento.valor) <= 0) {
         toast.error('Valor do pagamento deve ser maior que zero');
         return;
       }
@@ -244,12 +292,14 @@ export default function ComprasPage() {
       }
     }
 
-    // Validar se o valor total dos pagamentos é igual ao valor total da compra
+    // Validar se o valor total dos pagamentos é igual ao valor total da compra (após desconto)
     const valorTotalItens = calcularValorTotal();
+    const desconto = Number(compraForm.watch('desconto') || 0);
+    const valorTotalCompra = Math.max(0, valorTotalItens - desconto);
     const valorTotalPagamentos = calcularValorTotalPagamentos();
     
-    if (Math.abs(valorTotalPagamentos - valorTotalItens) > 0.01) {
-      toast.error(`O valor total dos pagamentos (R$ ${valorTotalPagamentos.toFixed(2)}) deve ser igual ao valor total da compra (R$ ${valorTotalItens.toFixed(2)})`);
+    if (Math.abs(valorTotalPagamentos - valorTotalCompra) > 0.01) {
+      toast.error(`O valor total dos pagamentos (R$ ${valorTotalPagamentos.toFixed(2)}) deve ser igual ao valor total da compra (R$ ${valorTotalCompra.toFixed(2)})`);
       return;
     }
 
@@ -262,7 +312,8 @@ export default function ComprasPage() {
         },
         body: JSON.stringify({
           ...data,
-          usuarioId: 'temp-user-id', // TODO: Implementar sistema de autenticação adequado
+          desconto: Number(data.desconto || 0),
+          usuarioId: session?.user?.id || 'temp-user-id',
         }),
       });
 
@@ -272,8 +323,8 @@ export default function ComprasPage() {
         compraForm.reset({
           nomeFornecedor: '',
           dataCompra: new Date().toISOString().split('T')[0],
-          itens: [{ produtoId: '', quantidade: 1, valorUnitario: 0 }],
-          pagamentos: [{ formaPagamento: 'PIX', valor: 0, dataVencimento: new Date().toISOString().split('T')[0] }],
+          itens: [{ produtoId: '', quantidade: 1, valorUnitario: '' }],
+          pagamentos: [{ formaPagamento: 'PIX', valor: '', dataVencimento: new Date().toISOString().split('T')[0] }],
         });
         loadCompras();
       } else {
@@ -323,8 +374,7 @@ export default function ComprasPage() {
   };
 
   const handleVerDetalhes = (compra: Compra) => {
-    setCompraDetalhes(compra);
-    setShowDetalhesModal(true);
+    router.push(`/compras/${compra.id}`);
   };
 
   const formatCurrency = (value: number) => {
@@ -357,16 +407,16 @@ export default function ComprasPage() {
     return null;
   }
 
-  const valorTotalCompra = calcularValorTotal();
+  const valorTotalItens = calcularValorTotal();
+  const desconto = Number(compraForm.watch('desconto') || 0);
+  const valorTotalCompra = Math.max(0, valorTotalItens - desconto);
 
   return (
     <div className="min-h-screen bg-gray-50 p-8">
       {/* Header Section */}
       <div className="flex justify-between items-center mb-8">
         <div>
-          <h2 className="text-3xl font-bold text-gray-900">
-            Compras
-          </h2>
+          <h2 className="text-3xl font-bold text-gray-900">Compras</h2>
           <p className="text-gray-600 mt-2">
             Registre e gerencie as compras de produtos.
           </p>
@@ -377,8 +427,8 @@ export default function ComprasPage() {
             compraForm.reset({
               nomeFornecedor: '',
               dataCompra: new Date().toISOString().split('T')[0],
-              itens: [{ produtoId: '', quantidade: 1, valorUnitario: 0 }],
-              pagamentos: [{ formaPagamento: 'PIX', valor: 0, dataVencimento: new Date().toISOString().split('T')[0] }],
+              itens: [{ produtoId: '', quantidade: 1, valorUnitario: '' }],
+              pagamentos: [{ formaPagamento: 'PIX', valor: '', dataVencimento: new Date().toISOString().split('T')[0] }],
             });
           }}
           className="flex items-center space-x-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors"
@@ -434,7 +484,7 @@ export default function ComprasPage() {
                 </label>
                 <button
                   type="button"
-                  onClick={() => append({ produtoId: '', quantidade: 1, valorUnitario: 0 })}
+                  onClick={() => append({ produtoId: '', quantidade: 1, valorUnitario: '' })}
                   className="flex items-center space-x-1 text-sm text-indigo-600 hover:text-indigo-700"
                 >
                   <Plus className="h-4 w-4" />
@@ -446,20 +496,79 @@ export default function ComprasPage() {
                 {fields.map((field, index) => (
                   <div key={field.id} className="grid grid-cols-1 md:grid-cols-12 gap-3 p-4 bg-gray-50 rounded-lg">
                     <div className="md:col-span-5">
-                      <select
-                        {...compraForm.register(`itens.${index}.produtoId` as const, { required: true })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      >
-                        <option value="">Selecione o produto</option>
-                        {produtos.map((produto) => (
-                          <option key={produto.id} value={produto.id}>
-                            {produto.nome}
-                          </option>
-                        ))}
-                      </select>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                        Produto *
+                      </label>
+                      <div className="relative">
+                        <input
+                          value={produtoSearch[index] ?? ''}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const arr = [...produtoSearch];
+                            arr[index] = val;
+                            setProdutoSearch(arr);
+                            const open = [...openSuggest];
+                            open[index] = true;
+                            setOpenSuggest(open);
+                          }}
+                          onFocus={() => {
+                            const open = [...openSuggest];
+                            open[index] = true;
+                            setOpenSuggest(open);
+                          }}
+                          placeholder="Digite para buscar produto (nome/descrição)"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                        {openSuggest[index] && (
+                          <div className="absolute z-10 mt-1 w-full max-h-56 overflow-auto bg-white border border-gray-200 rounded-lg shadow">
+                            {produtos
+                              .filter((p) => {
+                                const q = (produtoSearch[index] || '').toLowerCase().trim();
+                                if (!q) return true;
+                                return (
+                                  p.nome.toLowerCase().includes(q) ||
+                                  (p as any).descricao?.toLowerCase().includes(q) ||
+                                  (p as any).marca?.toLowerCase().includes(q)
+                                );
+                              })
+                              .slice(0, 12)
+                              .map((p) => (
+                                <button
+                                  key={p.id}
+                                  type="button"
+                                  onClick={() => {
+                                    compraForm.setValue(`itens.${index}.produtoId` as const, p.id, { shouldValidate: true });
+                                    const arr = [...produtoSearch];
+                                    arr[index] = p.nome;
+                                    setProdutoSearch(arr);
+                                    const open = [...openSuggest];
+                                    open[index] = false;
+                                    setOpenSuggest(open);
+                                  }}
+                                  className="w-full text-left px-3 py-2 hover:bg-indigo-50 focus:bg-indigo-50"
+                                >
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-sm text-gray-800 truncate mr-2">{p.nome}</span>
+                                  </div>
+                                  {p.descricao && (
+                                    <div className="text-xs text-gray-500 truncate">{(p as any).descricao}</div>
+                                  )}
+                                </button>
+                              ))}
+                            {produtos.length === 0 && (
+                              <div className="px-3 py-2 text-sm text-gray-500">Nenhum produto carregado</div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      {/* Campo oculto controlado pelo RHF para manter produtoId */}
+                      <input type="hidden" {...compraForm.register(`itens.${index}.produtoId` as const, { required: true })} />
                     </div>
 
                     <div className="md:col-span-2">
+                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                        Quantidade *
+                      </label>
                       <input
                         {...compraForm.register(`itens.${index}.quantidade` as const, { 
                           required: true,
@@ -474,6 +583,9 @@ export default function ComprasPage() {
                     </div>
 
                     <div className="md:col-span-3">
+                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                        Valor Unitário *
+                      </label>
                       <input
                         {...compraForm.register(`itens.${index}.valorUnitario` as const, { 
                           required: true,
@@ -493,20 +605,25 @@ export default function ComprasPage() {
                       />
                     </div>
 
-                    <div className="md:col-span-2 flex items-center justify-end space-x-2">
-                      <span className="text-sm font-medium text-gray-700">
-                        {formatCurrency((compraForm.watch(`itens.${index}.quantidade`) || 0) * (compraForm.watch(`itens.${index}.valorUnitario`) || 0))}
-                      </span>
-                      {fields.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => remove(index)}
-                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
-                          title="Remover item"
-                        >
-                          <Minus className="h-4 w-4" />
-                        </button>
-                      )}
+                    <div className="md:col-span-2 flex flex-col justify-end space-y-1">
+                      <label className="block text-xs font-medium text-gray-600">
+                        Total
+                      </label>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-gray-700">
+                          {formatCurrency((Number(compraForm.watch(`itens.${index}.quantidade`)) || 0) * (Number(compraForm.watch(`itens.${index}.valorUnitario`)) || 0))}
+                        </span>
+                        {fields.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => remove(index)}
+                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                            title="Remover item"
+                          >
+                            <Minus className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -521,7 +638,7 @@ export default function ComprasPage() {
                 </label>
                 <button
                   type="button"
-                  onClick={() => appendPagamento({ formaPagamento: 'PIX', valor: 0, dataVencimento: new Date().toISOString().split('T')[0] })}
+                  onClick={() => appendPagamento({ formaPagamento: 'PIX', valor: '', dataVencimento: new Date().toISOString().split('T')[0] })}
                   className="flex items-center space-x-1 text-sm text-indigo-600 hover:text-indigo-700"
                 >
                   <Plus className="h-4 w-4" />
@@ -646,13 +763,40 @@ export default function ComprasPage() {
               </div>
             </div>
 
+            {/* Desconto */}
+            <div className="max-w-xs">
+              <label className="block text-xs text-gray-500 mb-1">
+                Desconto (opcional)
+              </label>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-gray-500">R$</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  {...compraForm.register('desconto', { valueAsNumber: true })}
+                  className="flex-1 px-2 py-1.5 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-indigo-300 focus:border-indigo-300"
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+
             {/* Resumo dos Valores */}
             <div className="flex justify-end space-x-4">
               <div className="bg-gray-50 px-6 py-4 rounded-lg">
-                <p className="text-sm text-gray-600 mb-1">Valor Total da Compra</p>
+                <p className="text-sm text-gray-600 mb-1">Valor Total dos Itens</p>
                 <p className="text-xl font-bold text-gray-900">
-                  {formatCurrency(valorTotalCompra)}
+                  {formatCurrency(valorTotalItens)}
                 </p>
+                {desconto > 0 && (
+                  <>
+                    <p className="text-xs text-red-600 mt-1">
+                      Desconto: -{formatCurrency(desconto)}
+                    </p>
+                    <p className="text-sm text-gray-600 mt-1 pt-1 border-t border-gray-300">
+                      Total com desconto: <span className="font-bold">{formatCurrency(valorTotalCompra)}</span>
+                    </p>
+                  </>
+                )}
               </div>
               <div className={`px-6 py-4 rounded-lg ${
                 Math.abs(calcularValorTotalPagamentos() - valorTotalCompra) <= 0.01 
@@ -669,7 +813,7 @@ export default function ComprasPage() {
                 </p>
                 {Math.abs(calcularValorTotalPagamentos() - valorTotalCompra) > 0.01 && (
                   <p className="text-xs text-red-600 mt-1">
-                    Os valores devem ser iguais
+                    Deve ser igual ao total {desconto > 0 ? 'com desconto' : 'da compra'}
                   </p>
                 )}
               </div>
@@ -698,12 +842,72 @@ export default function ComprasPage() {
         </div>
       )}
 
+      {/* Filtros */}
+      {!showCreateForm && (
+        <div className="bg-white rounded-lg shadow p-6 mb-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">
+            Filtros
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Data Início
+              </label>
+              <input
+                type="date"
+                value={filtroDataInicio}
+                onChange={(e) => setFiltroDataInicio(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Data Fim
+              </label>
+              <input
+                type="date"
+                value={filtroDataFim}
+                onChange={(e) => setFiltroDataFim(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Fornecedor
+              </label>
+              <input
+                type="text"
+                placeholder="Nome do fornecedor"
+                value={filtroFornecedor}
+                onChange={(e) => setFiltroFornecedor(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+
+            <div className="flex items-end">
+              <button
+                onClick={() => {
+                  setFiltroDataInicio('');
+                  setFiltroDataFim('');
+                  setFiltroFornecedor('');
+                }}
+                className="w-full px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                Limpar Filtros
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Compras List */}
       {!showCreateForm && (
         <div className="bg-white rounded-lg shadow">
           <div className="px-6 py-4 border-b border-gray-200">
             <h3 className="text-lg font-semibold text-gray-900">
-              Histórico de Compras ({compras.length})
+              Lista de Compras ({total})
             </h3>
           </div>
           
@@ -735,14 +939,14 @@ export default function ComprasPage() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {compras.length === 0 && !isLoading ? (
+                {comprasFiltradas.length === 0 && !isLoading ? (
                   <tr>
                     <td colSpan={7} className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">
                       Nenhuma compra registrada.
                     </td>
                   </tr>
                 ) : (
-                  compras.map((compra) => (
+                  comprasFiltradas.map((compra) => (
                     <tr key={compra.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center text-sm text-gray-900">
@@ -819,6 +1023,49 @@ export default function ComprasPage() {
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Pagination Controls */}
+      {!showCreateForm && (
+        <div className="mt-4 px-6 py-4 bg-white rounded-lg shadow flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <span className="text-sm text-gray-600">Por página:</span>
+            <select
+              value={pageSize}
+              onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+              className="border border-gray-300 rounded px-2 py-1 text-sm"
+            >
+              <option value={5}>5</option>
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+          </div>
+          <div className="text-sm text-gray-600">
+            Página {page} de {Math.max(1, Math.ceil(total / pageSize))}
+          </div>
+          <div className="inline-flex items-center gap-2">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="inline-flex items-center gap-1 px-3 py-2 rounded-full border text-sm shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-label="Página anterior"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              <span>Anterior</span>
+            </button>
+            <button
+              onClick={() => setPage((p) => p + 1)}
+              disabled={page >= Math.ceil(total / pageSize)}
+              className="inline-flex items-center gap-1 px-3 py-2 rounded-full border text-sm shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-label="Próxima página"
+            >
+              <span>Próxima</span>
+              <ChevronRight className="h-4 w-4" />
+            </button>
           </div>
         </div>
       )}
@@ -959,13 +1206,8 @@ export default function ComprasPage() {
 
       {/* Modal de Confirmação de Exclusão */}
       {showDeleteModal && compraToDelete && (
-        <div 
-          className="fixed inset-0 flex items-center justify-center z-50"
-        >
-          <div 
-            className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 border border-gray-200"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className="fixed inset-0 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 border border-gray-200">
             <div className="p-6">
               <div className="flex items-center mb-4">
                 <div className="flex-shrink-0">
@@ -987,6 +1229,9 @@ export default function ComprasPage() {
                 <p className="text-gray-700">
                   Tem certeza que deseja excluir a compra do fornecedor{' '}
                   <span className="font-semibold text-gray-900">{compraToDelete.nomeFornecedor}</span>?
+                </p>
+                <p className="text-sm text-gray-500 mt-2">
+                  Valor: {formatCurrency(compraToDelete.valorTotal)}
                 </p>
               </div>
 
