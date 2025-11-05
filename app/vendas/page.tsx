@@ -54,7 +54,7 @@ export default function VendasPage() {
   const [estoquePorItem, setEstoquePorItem] = useState<{ [index: number]: number | null }>({});
   const [filters, setFilters] = useState({
     nomeCliente: '',
-    vendedorId: '',
+    numeroVenda: '',
     dataInicio: '',
     dataFim: '',
   });
@@ -136,7 +136,7 @@ export default function VendasPage() {
       setIsLoading(true);
       const params: any = { page, pageSize };
       if (filters.nomeCliente) params.nomeCliente = filters.nomeCliente;
-      if (filters.vendedorId) params.vendedorId = filters.vendedorId;
+      if (filters.numeroVenda) params.numeroVenda = filters.numeroVenda;
       if (filters.dataInicio) params.dataInicio = filters.dataInicio;
       if (filters.dataFim) params.dataFim = filters.dataFim;
       
@@ -722,19 +722,14 @@ export default function VendasPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Vendedor</label>
-              <select
-                value={filters.vendedorId}
-                onChange={(e) => setFilters({ ...filters, vendedorId: e.target.value })}
+              <label className="block text-sm font-medium text-gray-700 mb-2">Número da Venda</label>
+              <input
+                type="text"
+                value={filters.numeroVenda}
+                onChange={(e) => setFilters({ ...filters, numeroVenda: e.target.value })}
+                placeholder="Digite o número da venda"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-              >
-                <option value="">Todos</option>
-                {vendedores.map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.nome}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
 
             <div>
@@ -761,7 +756,7 @@ export default function VendasPage() {
               <button
                 onClick={() => setFilters({
                   nomeCliente: '',
-                  vendedorId: '',
+                  numeroVenda: '',
                   dataInicio: '',
                   dataFim: '',
                 })}

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useSidebar } from '../contexts/SidebarContext';
 import { 
   Home,
@@ -15,7 +15,8 @@ import {
   ChevronRight,
   LogOut,
   DollarSign,
-  Wallet
+  Wallet,
+  Settings
 } from 'lucide-react';
 import { signOut, useSession } from 'next-auth/react';
 
@@ -28,11 +29,18 @@ interface MenuItem {
 export default function Sidebar() {
   const { isCollapsed, setIsCollapsed } = useSidebar();
   const pathname = usePathname();
+  const router = useRouter();
   const { data: session } = useSession();
+
+  // Verificar se o usuário é admin (usuário com nome "admin")
+  // O email na sessão é na verdade o campo "usuario" do backend
+  const isAdmin = session?.user?.email === 'admin' || 
+                  (session?.user?.name && session.user.name.toLowerCase() === 'administrador') ||
+                  (session?.user?.name && session.user.name.toLowerCase().includes('admin'));
 
   const menuItems: MenuItem[] = [
     { title: 'Dashboard', icon: Home, path: '/dashboard' },
-    { title: 'Usuários', icon: Users, path: '/users' },
+    ...(isAdmin ? [{ title: 'Usuários', icon: Users, path: '/users' }] : []),
     { title: 'Funcionários', icon: UserCheck, path: '/funcionarios' },
     { title: 'Cargos', icon: Briefcase, path: '/cargos' },
     { title: 'Produtos', icon: Package, path: '/produtos' },
@@ -123,9 +131,17 @@ export default function Sidebar() {
         {!isCollapsed ? (
           <div className="space-y-3">
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center">
-                <Users className="w-5 h-5 text-gray-600" />
-              </div>
+              {session?.user?.image ? (
+                <img
+                  src={session.user.image}
+                  alt="Avatar"
+                  className="w-10 h-10 rounded-full object-cover"
+                />
+              ) : (
+                <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center">
+                  <Users className="w-5 h-5 text-gray-600" />
+                </div>
+              )}
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-900 truncate">
                   {session?.user?.name || 'Usuário'}
@@ -134,6 +150,18 @@ export default function Sidebar() {
                   {session?.user?.email || 'email@exemplo.com'}
                 </p>
               </div>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  router.push('/perfil');
+                }}
+                className="p-1.5 rounded-lg text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                title="Editar meu perfil"
+              >
+                <Settings className="w-4 h-4" />
+              </button>
             </div>
             <button
               onClick={handleSignOut}
@@ -144,13 +172,38 @@ export default function Sidebar() {
             </button>
           </div>
         ) : (
-          <button
-            onClick={handleSignOut}
-            className="w-full flex items-center justify-center p-3 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-            title="Sair"
-          >
-            <LogOut className="w-5 h-5" />
-          </button>
+          <div className="space-y-2">
+            <div className="w-full flex items-center justify-center p-3 relative group">
+              {session?.user?.image ? (
+                <img
+                  src={session.user.image}
+                  alt="Avatar"
+                  className="w-8 h-8 rounded-full object-cover"
+                />
+              ) : (
+                <Users className="w-5 h-5 text-gray-600" />
+              )}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  router.push('/perfil');
+                }}
+                className="absolute -top-1 -right-1 p-1 bg-white rounded-full shadow-md text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                title="Editar meu perfil"
+              >
+                <Settings className="w-3 h-3" />
+              </button>
+            </div>
+            <button
+              onClick={handleSignOut}
+              className="w-full flex items-center justify-center p-3 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+              title="Sair"
+            >
+              <LogOut className="w-5 h-5" />
+            </button>
+          </div>
         )}
       </div>
     </aside>

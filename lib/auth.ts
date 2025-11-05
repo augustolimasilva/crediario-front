@@ -80,19 +80,33 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
       // Adiciona o access_token ao JWT na primeira autenticação
       if (user) {
         token.accessToken = (user as any).accessToken;
         token.id = user.id;
+        token.picture = user.image || (user as any).picture;
+      }
+      // Atualizar token quando a sessão é atualizada (ex: após atualizar perfil)
+      if (trigger === 'update' && session) {
+        if ((session as any).image) {
+          token.picture = (session as any).image;
+        }
+        if ((session as any).name) {
+          token.name = (session as any).name;
+        }
       }
       return token;
     },
     async session({ session, token }) {
       // Adiciona o access_token e id à sessão
-      if (token) {
+      if (token && session.user) {
         (session as any).accessToken = token.accessToken;
         (session.user as any).id = token.id;
+        // Atualizar imagem do usuário se disponível no token
+        if (token.picture) {
+          session.user.image = token.picture as string;
+        }
       }
       return session;
     },

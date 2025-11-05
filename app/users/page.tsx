@@ -1,7 +1,7 @@
 'use client';
 
 import { useSession, signOut } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
@@ -16,7 +16,9 @@ import {
   Mail,
   Lock,
   Eye,
-  EyeOff
+  EyeOff,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 
 interface User {
@@ -37,6 +39,7 @@ interface UserForm {
 export default function UsersPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [users, setUsers] = useState<User[]>([]);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(5);
@@ -61,6 +64,34 @@ export default function UsersPage() {
       loadUsers();
     }
   }, [session, page, pageSize]);
+
+  // Verificar se há parâmetro edit na URL para abrir edição automaticamente
+  useEffect(() => {
+    const editId = searchParams.get('edit');
+    if (editId && !editingUser && !showCreateForm && session) {
+      // Primeiro tenta encontrar na lista atual
+      const userToEdit = users.find(u => u.id === editId);
+      if (userToEdit) {
+        handleEditUser(userToEdit);
+      } else if (users.length > 0) {
+        // Se a lista já foi carregada mas o usuário não está nela, buscar diretamente
+        fetchUserById(editId);
+      }
+      // Se users ainda está vazio, vai esperar o loadUsers completar
+    }
+  }, [searchParams, users.length, editingUser, showCreateForm, session]);
+
+  const fetchUserById = async (userId: string) => {
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/user/${userId}`);
+      if (response.ok) {
+        const user = await response.json();
+        handleEditUser(user);
+      }
+    } catch (error) {
+      toast.error('Erro ao carregar usuário');
+    }
+  };
 
   const loadUsers = async () => {
     try {
@@ -500,16 +531,18 @@ export default function UsersPage() {
               <button
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page <= 1}
-                className="px-3 py-1 border rounded disabled:opacity-50"
+                className="inline-flex items-center gap-1 px-3 py-2 rounded-full border text-sm shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Anterior
+                <ChevronLeft className="h-4 w-4" />
+                <span>Anterior</span>
               </button>
               <button
                 onClick={() => setPage((p) => p + 1)}
                 disabled={page >= Math.ceil(total / pageSize)}
-                className="px-3 py-1 border rounded disabled:opacity-50"
+                className="inline-flex items-center gap-1 px-3 py-2 rounded-full border text-sm shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Próxima
+                <span>Próxima</span>
+                <ChevronRight className="h-4 w-4" />
               </button>
             </div>
           </div>

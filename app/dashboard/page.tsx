@@ -20,10 +20,15 @@ interface DashboardStats {
   vendasSemana: { quantidade: number; valor: number };
   vendasMes: { quantidade: number; valor: number };
   receitaMes: number;
+  totalDespesasMes: number;
+  saldoMes: number;
   produtosEstoqueBaixo: Array<{ id: string; nome: string; quantidadeEstoque: number; quantidadeMinimaEstoque: number }>;
   rankingVendedoresValor: Array<{ funcionarioId: string; funcionarioNome: string; valorTotal: number }>;
   rankingVendedoresQuantidade: Array<{ funcionarioId: string; funcionarioNome: string; quantidade: number }>;
   rankingProdutos: Array<{ produtoId: string; produtoNome: string; quantidade: number }>;
+  valorEstoqueAtual: number;
+  pagamentosDiaNaoRealizados: number;
+  recebimentosDiaNaoRecebidos: number;
 }
 
 const formatCurrency = (value: number) => {
@@ -85,8 +90,8 @@ export default function DashboardPage() {
         <p className="text-gray-600 mt-2">Visão geral das vendas e estatísticas do sistema.</p>
       </div>
 
-      {/* Vendas por Período */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      {/* Cards Principais */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
         <div className="bg-white rounded-lg shadow p-6">
           <div className="flex items-center">
             <div className="p-2 bg-blue-100 rounded-lg">
@@ -125,56 +130,49 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Informações Financeiras e Estoque */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+        <div className="bg-white rounded-lg shadow p-6">
+          <div className="flex items-center">
+            <div className="p-2 bg-purple-100 rounded-lg">
+              <Package className="h-6 w-6 text-purple-600" />
+            </div>
+            <div className="ml-4 flex-1">
+              <p className="text-sm font-medium text-gray-600">Valor do Estoque</p>
+              <p className="text-2xl font-bold text-purple-600">{formatCurrency(stats.valorEstoqueAtual || 0)}</p>
+            </div>
+          </div>
+        </div>
 
         <div className="bg-white rounded-lg shadow p-6">
           <div className="flex items-center">
-            <div className="p-2 bg-green-100 rounded-lg">
-              <DollarSign className="h-6 w-6 text-green-600" />
+            <div className="p-2 bg-red-100 rounded-lg">
+              <AlertTriangle className="h-6 w-6 text-red-600" />
             </div>
             <div className="ml-4 flex-1">
-              <p className="text-sm font-medium text-gray-600">Receita do Mês</p>
-              <p className="text-2xl font-bold text-green-600">{formatCurrency(stats.receitaMes)}</p>
+              <p className="text-sm font-medium text-gray-600">Pagamentos do Dia Não Realizados</p>
+              <p className="text-2xl font-bold text-red-600">{formatCurrency(stats.pagamentosDiaNaoRealizados || 0)}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg shadow p-6">
+          <div className="flex items-center">
+            <div className="p-2 bg-orange-100 rounded-lg">
+              <AlertTriangle className="h-6 w-6 text-orange-600" />
+            </div>
+            <div className="ml-4 flex-1">
+              <p className="text-sm font-medium text-gray-600">Recebimentos do Dia Não Recebidos</p>
+              <p className="text-2xl font-bold text-orange-600">{formatCurrency(stats.recebimentosDiaNaoRecebidos || 0)}</p>
             </div>
           </div>
         </div>
       </div>
 
+      {/* Rankings de Vendedores */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-        {/* Produtos com Estoque Baixo */}
-        <div className="bg-white rounded-lg shadow">
-          <div className="p-6 border-b border-gray-200">
-            <div className="flex items-center">
-              <AlertTriangle className="h-5 w-5 text-orange-600 mr-2" />
-              <h3 className="text-lg font-semibold text-gray-900">Produtos com Estoque Baixo</h3>
-            </div>
-          </div>
-          <div className="p-6">
-            {stats.produtosEstoqueBaixo.length === 0 ? (
-              <p className="text-gray-500 text-center py-4">Nenhum produto com estoque baixo</p>
-            ) : (
-              <div className="space-y-3">
-                {stats.produtosEstoqueBaixo.map((produto) => (
-                  <div key={produto.id} className="flex items-center justify-between p-3 bg-orange-50 rounded-lg border border-orange-200">
-                    <div>
-                      <p className="font-medium text-gray-900">{produto.nome}</p>
-                      <p className="text-sm text-gray-600">
-                        Estoque: {produto.quantidadeEstoque} / Mínimo: {produto.quantidadeMinimaEstoque}
-                      </p>
-                    </div>
-                    <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                      produto.quantidadeEstoque === 0 
-                        ? 'bg-red-100 text-red-700' 
-                        : 'bg-orange-100 text-orange-700'
-                    }`}>
-                      {produto.quantidadeEstoque === 0 ? 'Esgotado' : 'Abaixo do Mínimo'}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
         {/* Ranking de Vendedores por Valor */}
         <div className="bg-white rounded-lg shadow">
           <div className="p-6 border-b border-gray-200">
@@ -211,9 +209,7 @@ export default function DashboardPage() {
             )}
           </div>
         </div>
-      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Ranking de Vendedores por Quantidade */}
         <div className="bg-white rounded-lg shadow">
           <div className="p-6 border-b border-gray-200">
@@ -244,6 +240,44 @@ export default function DashboardPage() {
                         <p className="text-sm text-blue-600 font-semibold">{vendedor.quantidade} vendas</p>
                       </div>
                     </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Produtos */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Produtos com Estoque Baixo */}
+        <div className="bg-white rounded-lg shadow">
+          <div className="p-6 border-b border-gray-200">
+            <div className="flex items-center">
+              <AlertTriangle className="h-5 w-5 text-orange-600 mr-2" />
+              <h3 className="text-lg font-semibold text-gray-900">Produtos com Estoque Baixo</h3>
+            </div>
+          </div>
+          <div className="p-6">
+            {stats.produtosEstoqueBaixo.length === 0 ? (
+              <p className="text-gray-500 text-center py-4">Nenhum produto com estoque baixo</p>
+            ) : (
+              <div className="space-y-3">
+                {stats.produtosEstoqueBaixo.map((produto) => (
+                  <div key={produto.id} className="flex items-center justify-between p-3 bg-orange-50 rounded-lg border border-orange-200">
+                    <div>
+                      <p className="font-medium text-gray-900">{produto.nome}</p>
+                      <p className="text-sm text-gray-600">
+                        Estoque: {produto.quantidadeEstoque} / Mínimo: {produto.quantidadeMinimaEstoque}
+                      </p>
+                    </div>
+                    <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                      produto.quantidadeEstoque === 0 
+                        ? 'bg-red-100 text-red-700' 
+                        : 'bg-orange-100 text-orange-700'
+                    }`}>
+                      {produto.quantidadeEstoque === 0 ? 'Esgotado' : 'Abaixo do Mínimo'}
+                    </span>
                   </div>
                 ))}
               </div>
