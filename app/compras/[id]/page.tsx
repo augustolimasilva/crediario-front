@@ -101,10 +101,11 @@ export default function CompraDetailPage({ params }: { params: Promise<{ id: str
   }, [session, params, router]);
 
   const formatCurrency = (value: number) => {
+    const numValue = Number(value) || 0;
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
       currency: 'BRL'
-    }).format(value);
+    }).format(numValue);
   };
 
   const formatDate = (dateString: string) => {
@@ -202,18 +203,18 @@ export default function CompraDetailPage({ params }: { params: Promise<{ id: str
             <div>
               <p className="text-sm font-medium text-gray-500 mb-1">Valor Original</p>
               <p className="text-lg font-semibold text-gray-700">
-                {formatCurrency(compra.itens.reduce((sum, item) => sum + item.valorTotal, 0))}
+                {formatCurrency(compra.itens.reduce((sum, item) => sum + (Number(item.valorTotal) || 0), 0))}
               </p>
             </div>
             {compra.desconto && compra.desconto > 0 && (
               <div>
                 <p className="text-sm font-medium text-gray-500 mb-1">Desconto</p>
-                <p className="text-lg font-semibold text-red-600">- {formatCurrency(compra.desconto)}</p>
+                <p className="text-lg font-semibold text-red-600">- {formatCurrency(Number(compra.desconto) || 0)}</p>
               </div>
             )}
             <div>
               <p className="text-sm font-medium text-gray-500 mb-1">Valor Total</p>
-              <p className="text-lg font-semibold text-green-600">{formatCurrency(compra.valorTotal)}</p>
+              <p className="text-lg font-semibold text-green-600">{formatCurrency(Number(compra.valorTotal) || 0)}</p>
             </div>
           </div>
         </div>
@@ -261,10 +262,10 @@ export default function CompraDetailPage({ params }: { params: Promise<{ id: str
                     {item.quantidade}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {formatCurrency(item.valorUnitario)}
+                    {formatCurrency(Number(item.valorUnitario) || 0)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    {formatCurrency(item.valorTotal)}
+                    {formatCurrency(Number(item.valorTotal) || 0)}
                   </td>
                 </tr>
               ))}
@@ -309,7 +310,7 @@ export default function CompraDetailPage({ params }: { params: Promise<{ id: str
                       )}
                     </div>
                     <div className="text-lg font-semibold text-gray-900">
-                      {formatCurrency(lancamento.valor)}
+                      {formatCurrency(Number(lancamento.valor) || 0)}
                     </div>
                     {lancamento.observacao && (
                       <div className="text-sm text-gray-600 mt-1">
