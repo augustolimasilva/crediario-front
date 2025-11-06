@@ -109,8 +109,24 @@ export default function CompraDetailPage({ params }: { params: Promise<{ id: str
   };
 
   const formatDate = (dateString: string) => {
+    if (!dateString) return '';
+    // Se a string já está no formato YYYY-MM-DD, usar diretamente
+    if (dateString.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      const [year, month, day] = dateString.split('-').map(Number);
+      return `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${year}`;
+    }
+    // Se é uma string ISO (YYYY-MM-DDTHH:mm:ss.sssZ), extrair apenas a parte da data
+    const isoMatch = dateString.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (isoMatch) {
+      const [, year, month, day] = isoMatch;
+      return `${day}/${month}/${year}`;
+    }
+    // Fallback: usar new Date (pode ter problemas de timezone)
     const date = new Date(dateString);
-    return date.toLocaleDateString('pt-BR');
+    const year = date.getFullYear();
+    const month = date.getMonth() + 1;
+    const day = date.getDate();
+    return `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${year}`;
   };
 
   const computeLancamentoStatus = (l: LancamentoFinanceiro) => {
