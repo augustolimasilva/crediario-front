@@ -12,7 +12,9 @@ import {
   AlertTriangle,
   Trophy,
   BarChart3,
-  Calendar
+  Calendar,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 
 interface DashboardStats {
@@ -43,6 +45,9 @@ export default function DashboardPage() {
   const router = useRouter();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [pageEstoqueBaixo, setPageEstoqueBaixo] = useState(1);
+  const [pageProdutosVendidos, setPageProdutosVendidos] = useState(1);
+  const itemsPerPage = 5;
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -55,6 +60,9 @@ export default function DashboardPage() {
       try {
         const response = await api.get('/venda/dashboard/stats');
         setStats(response.data);
+        // Resetar páginas quando os dados forem recarregados
+        setPageEstoqueBaixo(1);
+        setPageProdutosVendidos(1);
       } catch (error) {
         console.error('Erro ao carregar estatísticas:', error);
       } finally {
@@ -253,34 +261,66 @@ export default function DashboardPage() {
         {/* Produtos com Estoque Baixo */}
         <div className="bg-white rounded-lg shadow">
           <div className="p-6 border-b border-gray-200">
-            <div className="flex items-center">
-              <AlertTriangle className="h-5 w-5 text-orange-600 mr-2" />
-              <h3 className="text-lg font-semibold text-gray-900">Produtos com Estoque Baixo</h3>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <AlertTriangle className="h-5 w-5 text-orange-600 mr-2" />
+                <h3 className="text-lg font-semibold text-gray-900">Produtos com Estoque Baixo</h3>
+              </div>
+              <span className="text-sm text-gray-500">
+                {stats.produtosEstoqueBaixo.length} produto(s)
+              </span>
             </div>
           </div>
           <div className="p-6">
             {stats.produtosEstoqueBaixo.length === 0 ? (
               <p className="text-gray-500 text-center py-4">Nenhum produto com estoque baixo</p>
             ) : (
-              <div className="space-y-3">
-                {stats.produtosEstoqueBaixo.map((produto) => (
-                  <div key={produto.id} className="flex items-center justify-between p-3 bg-orange-50 rounded-lg border border-orange-200">
-                    <div>
-                      <p className="font-medium text-gray-900">{produto.nome}</p>
-                      <p className="text-sm text-gray-600">
-                        Estoque: {produto.quantidadeEstoque} / Mínimo: {produto.quantidadeMinimaEstoque}
-                      </p>
+              <>
+                <div className="space-y-3 mb-4">
+                  {stats.produtosEstoqueBaixo
+                    .slice((pageEstoqueBaixo - 1) * itemsPerPage, pageEstoqueBaixo * itemsPerPage)
+                    .map((produto) => (
+                    <div key={produto.id} className="flex items-center justify-between p-3 bg-orange-50 rounded-lg border border-orange-200">
+                      <div>
+                        <p className="font-medium text-gray-900">{produto.nome}</p>
+                        <p className="text-sm text-gray-600">
+                          Estoque: {produto.quantidadeEstoque} / Mínimo: {produto.quantidadeMinimaEstoque}
+                        </p>
+                      </div>
+                      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                        produto.quantidadeEstoque === 0 
+                          ? 'bg-red-100 text-red-700' 
+                          : 'bg-orange-100 text-orange-700'
+                      }`}>
+                        {produto.quantidadeEstoque === 0 ? 'Esgotado' : 'Abaixo do Mínimo'}
+                      </span>
                     </div>
-                    <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                      produto.quantidadeEstoque === 0 
-                        ? 'bg-red-100 text-red-700' 
-                        : 'bg-orange-100 text-orange-700'
-                    }`}>
-                      {produto.quantidadeEstoque === 0 ? 'Esgotado' : 'Abaixo do Mínimo'}
+                  ))}
+                </div>
+                {stats.produtosEstoqueBaixo.length > itemsPerPage && (
+                  <div className="flex items-center justify-between pt-4 border-t border-gray-200">
+                    <button
+                      onClick={() => setPageEstoqueBaixo(p => Math.max(1, p - 1))}
+                      disabled={pageEstoqueBaixo === 1}
+                      className="flex items-center px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <ChevronLeft className="h-4 w-4 mr-1" />
+                      Anterior
+                    </button>
+                    <span className="text-sm text-gray-600">
+                      Página {pageEstoqueBaixo} de {Math.ceil(stats.produtosEstoqueBaixo.length / itemsPerPage)}
                     </span>
+                    <button
+                      onClick={() => setPageEstoqueBaixo(p => Math.min(Math.ceil(stats.produtosEstoqueBaixo.length / itemsPerPage), p + 1))}
+                      disabled={pageEstoqueBaixo >= Math.ceil(stats.produtosEstoqueBaixo.length / itemsPerPage)}
+                      className="flex items-center px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Próxima
+                      <ChevronRight className="h-4 w-4 ml-1" />
+                    </button>
                   </div>
-                ))}
-              </div>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -288,36 +328,70 @@ export default function DashboardPage() {
         {/* Ranking de Produtos */}
         <div className="bg-white rounded-lg shadow">
           <div className="p-6 border-b border-gray-200">
-            <div className="flex items-center">
-              <TrendingUp className="h-5 w-5 text-purple-600 mr-2" />
-              <h3 className="text-lg font-semibold text-gray-900">Produtos Mais Vendidos</h3>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <TrendingUp className="h-5 w-5 text-purple-600 mr-2" />
+                <h3 className="text-lg font-semibold text-gray-900">Produtos Mais Vendidos</h3>
+              </div>
+              <span className="text-sm text-gray-500">
+                {stats.rankingProdutos.length} produto(s) - Mês atual
+              </span>
             </div>
-            <p className="text-sm text-gray-500 mt-1">Mês atual</p>
           </div>
           <div className="p-6">
             {stats.rankingProdutos.length === 0 ? (
               <p className="text-gray-500 text-center py-4">Nenhuma venda no mês</p>
             ) : (
-              <div className="space-y-3">
-                {stats.rankingProdutos.map((produto, index) => (
-                  <div key={produto.produtoId} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div className="flex items-center">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                        index === 0 ? 'bg-yellow-100 text-yellow-700' :
-                        index === 1 ? 'bg-gray-100 text-gray-700' :
-                        index === 2 ? 'bg-orange-100 text-orange-700' :
-                        'bg-blue-100 text-blue-700'
-                      }`}>
-                        {index + 1}
-                      </div>
-                      <div className="ml-3">
-                        <p className="font-medium text-gray-900">{produto.produtoNome}</p>
-                        <p className="text-sm text-purple-600 font-semibold">{produto.quantidade} unidades</p>
-                      </div>
-                    </div>
+              <>
+                <div className="space-y-3 mb-4">
+                  {stats.rankingProdutos
+                    .slice((pageProdutosVendidos - 1) * itemsPerPage, pageProdutosVendidos * itemsPerPage)
+                    .map((produto, index) => {
+                      const globalIndex = (pageProdutosVendidos - 1) * itemsPerPage + index;
+                      return (
+                        <div key={produto.produtoId} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                          <div className="flex items-center">
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                              globalIndex === 0 ? 'bg-yellow-100 text-yellow-700' :
+                              globalIndex === 1 ? 'bg-gray-100 text-gray-700' :
+                              globalIndex === 2 ? 'bg-orange-100 text-orange-700' :
+                              'bg-blue-100 text-blue-700'
+                            }`}>
+                              {globalIndex + 1}
+                            </div>
+                            <div className="ml-3">
+                              <p className="font-medium text-gray-900">{produto.produtoNome}</p>
+                              <p className="text-sm text-purple-600 font-semibold">{produto.quantidade} unidades</p>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+                {stats.rankingProdutos.length > itemsPerPage && (
+                  <div className="flex items-center justify-between pt-4 border-t border-gray-200">
+                    <button
+                      onClick={() => setPageProdutosVendidos(p => Math.max(1, p - 1))}
+                      disabled={pageProdutosVendidos === 1}
+                      className="flex items-center px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <ChevronLeft className="h-4 w-4 mr-1" />
+                      Anterior
+                    </button>
+                    <span className="text-sm text-gray-600">
+                      Página {pageProdutosVendidos} de {Math.ceil(stats.rankingProdutos.length / itemsPerPage)}
+                    </span>
+                    <button
+                      onClick={() => setPageProdutosVendidos(p => Math.min(Math.ceil(stats.rankingProdutos.length / itemsPerPage), p + 1))}
+                      disabled={pageProdutosVendidos >= Math.ceil(stats.rankingProdutos.length / itemsPerPage)}
+                      className="flex items-center px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Próxima
+                      <ChevronRight className="h-4 w-4 ml-1" />
+                    </button>
                   </div>
-                ))}
-              </div>
+                )}
+              </>
             )}
           </div>
         </div>
