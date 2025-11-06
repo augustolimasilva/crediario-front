@@ -59,7 +59,7 @@ function ProdutosPageContent() {
   const searchParams = useSearchParams();
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(5);
+  const [pageSize, setPageSize] = useState(10);
   const [total, setTotal] = useState(0);
   const [filteredProdutos, setFilteredProdutos] = useState<Produto[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -91,6 +91,11 @@ function ProdutosPageContent() {
       loadProdutos();
     }
   }, [session, page, pageSize]);
+
+  // Resetar página quando o termo de busca mudar
+  useEffect(() => {
+    setPage(1);
+  }, [searchTerm]);
 
   // Filtrar produtos baseado no termo de busca
   useEffect(() => {
@@ -586,7 +591,9 @@ function ProdutosPageContent() {
                     </td>
                   </tr>
                 ) : (
-                  filteredProdutos.map((produto) => (
+                  filteredProdutos
+                    .slice((page - 1) * pageSize, page * pageSize)
+                    .map((produto) => (
                     <tr key={produto.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
@@ -685,7 +692,6 @@ function ProdutosPageContent() {
               onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
               className="border border-gray-300 rounded px-2 py-1 text-sm"
             >
-              <option value={5}>5</option>
               <option value={10}>10</option>
               <option value={20}>20</option>
               <option value={50}>50</option>
@@ -693,7 +699,7 @@ function ProdutosPageContent() {
             </select>
           </div>
           <div className="text-sm text-gray-600">
-            Página {page} de {Math.max(1, Math.ceil(total / pageSize))}
+            Página {page} de {Math.max(1, Math.ceil(filteredProdutos.length / pageSize))}
           </div>
           <div className="inline-flex items-center gap-2">
             <button
@@ -707,7 +713,7 @@ function ProdutosPageContent() {
             </button>
             <button
               onClick={() => setPage((p) => p + 1)}
-              disabled={page >= Math.ceil(total / pageSize)}
+              disabled={page >= Math.ceil(filteredProdutos.length / pageSize)}
               className="inline-flex items-center gap-1 px-3 py-2 rounded-full border text-sm shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
               aria-label="Próxima página"
             >

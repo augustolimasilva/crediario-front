@@ -98,7 +98,7 @@ export default function ComprasPage() {
   const router = useRouter();
   const [compras, setCompras] = useState<Compra[]>([]);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(5);
+  const [pageSize, setPageSize] = useState(10);
   const [total, setTotal] = useState(0);
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [produtoSearch, setProdutoSearch] = useState<string[]>([]);
@@ -176,6 +176,11 @@ export default function ComprasPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [valorTotalCompraCalculado, pagamentos?.length]);
+
+  // Resetar página quando filtros mudarem
+  useEffect(() => {
+    setPage(1);
+  }, [filtroDataInicio, filtroDataFim, filtroFornecedor]);
 
   // Aplicar filtros
   useEffect(() => {
@@ -955,7 +960,7 @@ export default function ComprasPage() {
         <div className="bg-white rounded-lg shadow">
           <div className="px-6 py-4 border-b border-gray-200">
             <h3 className="text-lg font-semibold text-gray-900">
-              Lista de Compras ({total})
+              Lista de Compras ({comprasFiltradas.length})
             </h3>
           </div>
           
@@ -994,7 +999,9 @@ export default function ComprasPage() {
                     </td>
                   </tr>
                 ) : (
-                  comprasFiltradas.map((compra) => (
+                  comprasFiltradas
+                    .slice((page - 1) * pageSize, page * pageSize)
+                    .map((compra) => (
                     <tr key={compra.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center text-sm text-gray-900">
@@ -1085,7 +1092,6 @@ export default function ComprasPage() {
               onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
               className="border border-gray-300 rounded px-2 py-1 text-sm"
             >
-              <option value={5}>5</option>
               <option value={10}>10</option>
               <option value={20}>20</option>
               <option value={50}>50</option>
@@ -1093,7 +1099,7 @@ export default function ComprasPage() {
             </select>
           </div>
           <div className="text-sm text-gray-600">
-            Página {page} de {Math.max(1, Math.ceil(total / pageSize))}
+            Página {page} de {Math.max(1, Math.ceil(comprasFiltradas.length / pageSize))}
           </div>
           <div className="inline-flex items-center gap-2">
             <button
@@ -1107,7 +1113,7 @@ export default function ComprasPage() {
             </button>
             <button
               onClick={() => setPage((p) => p + 1)}
-              disabled={page >= Math.ceil(total / pageSize)}
+              disabled={page >= Math.ceil(comprasFiltradas.length / pageSize)}
               className="inline-flex items-center gap-1 px-3 py-2 rounded-full border text-sm shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
               aria-label="Próxima página"
             >

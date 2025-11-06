@@ -44,7 +44,7 @@ export default function VendasPage() {
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [vendedores, setVendedores] = useState<Funcionario[]>([]);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(5);
+  const [pageSize, setPageSize] = useState(10);
   const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -122,14 +122,20 @@ export default function VendasPage() {
 
   useEffect(() => { if (status === 'unauthenticated') router.push('/login'); }, [status, router]);
   
-  // Resetar página quando filtros mudarem
+  // Resetar página quando filtros mudarem (antes de carregar os dados)
   useEffect(() => {
     if (session) {
       setPage(1);
     }
   }, [filters, session]);
 
-  useEffect(() => { if (session) { loadVendas(); loadProdutos(); loadVendedores(); } }, [session, page, pageSize, filters]);
+  useEffect(() => { 
+    if (session) { 
+      loadVendas(); 
+      loadProdutos(); 
+      loadVendedores(); 
+    } 
+  }, [session, page, pageSize, filters]);
 
   const loadVendas = async () => {
     try {
@@ -822,7 +828,6 @@ export default function VendasPage() {
           <div className="flex items-center gap-3">
             <span className="text-sm text-gray-600">Por página:</span>
             <select value={pageSize} onChange={(e)=>{setPageSize(Number(e.target.value)); setPage(1);}} className="border border-gray-300 rounded px-2 py-1 text-sm">
-              <option value={5}>5</option>
               <option value={10}>10</option>
               <option value={20}>20</option>
               <option value={50}>50</option>
