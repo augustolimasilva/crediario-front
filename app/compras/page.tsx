@@ -12,7 +12,7 @@ interface ExtendedSession {
 import { useRouter } from 'next/navigation';
 import api from '../../lib/axios';
 import { useEffect, useState } from 'react';
-import { useForm, useFieldArray } from 'react-hook-form';
+import { useForm, useFieldArray, useWatch } from 'react-hook-form';
 import { toast } from 'sonner';
 import { 
   ShoppingCart, 
@@ -123,7 +123,7 @@ export default function ComprasPage() {
     },
   });
 
-  const { fields, append, remove } = useFieldArray({
+  const { fields, append, prepend, remove } = useFieldArray({
     control: compraForm.control,
     name: 'itens',
   });
@@ -145,6 +145,37 @@ export default function ComprasPage() {
       loadProdutos();
     }
   }, [session, page, pageSize]);
+
+  // Observar mudanças nos itens e desconto para atualizar o valor do pagamento
+  const itens = useWatch({ control: compraForm.control, name: 'itens' });
+  const descontoValue = useWatch({ control: compraForm.control, name: 'desconto' });
+  const pagamentos = useWatch({ control: compraForm.control, name: 'pagamentos' });
+  
+  // Calcular total sempre que itens ou desconto mudarem
+  const valorTotalItens = itens?.reduce((total, item) => {
+    const quantidade = Number(item.quantidade) || 0;
+    const valorUnitario = Number(item.valorUnitario) || 0;
+    return total + (quantidade * valorUnitario);
+  }, 0) || 0;
+  
+  const desconto = Number(descontoValue || 0);
+  const valorTotalCompraCalculado = Math.max(0, valorTotalItens - desconto);
+  
+  useEffect(() => {
+    if (!itens || itens.length === 0) {
+      // Se não há itens, limpar o valor do pagamento
+      if (pagamentos && pagamentos.length > 0) {
+        compraForm.setValue('pagamentos.0.valor', '', { shouldValidate: true });
+      }
+      return;
+    }
+    
+    // Sempre atualizar o valor do primeiro pagamento quando o total mudar
+    if (pagamentos && pagamentos.length > 0) {
+      compraForm.setValue('pagamentos.0.valor', valorTotalCompraCalculado > 0 ? valorTotalCompraCalculado.toFixed(2) : '', { shouldValidate: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [valorTotalCompraCalculado, pagamentos?.length]);
 
   // Aplicar filtros
   useEffect(() => {
@@ -212,14 +243,14 @@ export default function ComprasPage() {
   };
 
   const isFormValid = () => {
-    const valorTotalItens = calcularValorTotal();
-    const desconto = Number(compraForm.watch('desconto') || 0);
-    const valorTotalCompra = Math.max(0, valorTotalItens - desconto);
+    const valorTotalItensValidacao = calcularValorTotal();
+    const descontoValidacao = Number(compraForm.watch('desconto') || 0);
+    const valorTotalCompraValidacao = Math.max(0, valorTotalItensValidacao - descontoValidacao);
     const valorTotalPagamentos = calcularValorTotalPagamentos();
     const pagamentos = compraForm.watch('pagamentos');
     
     // Verificar se os valores coincidem (com tolerância de 0.01) - USANDO VALOR COM DESCONTO
-    const valoresCoincidem = Math.abs(valorTotalPagamentos - valorTotalCompra) <= 0.01;
+    const valoresCoincidem = Math.abs(valorTotalPagamentos - valorTotalCompraValidacao) <= 0.01;
     
     // Verificar se há pelo menos um pagamento
     const temPagamentos = pagamentos.length > 0;
@@ -293,13 +324,13 @@ export default function ComprasPage() {
     }
 
     // Validar se o valor total dos pagamentos é igual ao valor total da compra (após desconto)
-    const valorTotalItens = calcularValorTotal();
-    const desconto = Number(compraForm.watch('desconto') || 0);
-    const valorTotalCompra = Math.max(0, valorTotalItens - desconto);
+    const valorTotalItensValidacao = calcularValorTotal();
+    const descontoValidacao = Number(compraForm.watch('desconto') || 0);
+    const valorTotalCompraValidacao = Math.max(0, valorTotalItensValidacao - descontoValidacao);
     const valorTotalPagamentos = calcularValorTotalPagamentos();
     
-    if (Math.abs(valorTotalPagamentos - valorTotalCompra) > 0.01) {
-      toast.error(`O valor total dos pagamentos (R$ ${valorTotalPagamentos.toFixed(2)}) deve ser igual ao valor total da compra (R$ ${valorTotalCompra.toFixed(2)})`);
+    if (Math.abs(valorTotalPagamentos - valorTotalCompraValidacao) > 0.01) {
+      toast.error(`O valor total dos pagamentos (R$ ${valorTotalPagamentos.toFixed(2)}) deve ser igual ao valor total da compra (R$ ${valorTotalCompraValidacao.toFixed(2)})`);
       return;
     }
 
@@ -407,9 +438,10 @@ export default function ComprasPage() {
     return null;
   }
 
-  const valorTotalItens = calcularValorTotal();
-  const desconto = Number(compraForm.watch('desconto') || 0);
-  const valorTotalCompra = Math.max(0, valorTotalItens - desconto);
+  // Usar os valores já calculados acima para exibição
+  const valorTotalItensExibicao = calcularValorTotal();
+  const descontoExibicao = Number(descontoValue || 0);
+  const valorTotalCompraExibicao = Math.max(0, valorTotalItensExibicao - descontoExibicao);
 
   return (
     <div className="min-h-screen bg-gray-50 p-8">
@@ -484,7 +516,13 @@ export default function ComprasPage() {
                 </label>
                 <button
                   type="button"
-                  onClick={() => append({ produtoId: '', quantidade: 1, valorUnitario: '' })}
+                  onClick={() => {
+                    // Adicionar item vazio no início dos arrays de busca
+                    setProdutoSearch(['', ...produtoSearch]);
+                    setOpenSuggest([false, ...openSuggest]);
+                    // Adicionar novo item no início da lista
+                    prepend({ produtoId: '', quantidade: 1, valorUnitario: '' });
+                  }}
                   className="flex items-center space-x-1 text-sm text-indigo-600 hover:text-indigo-700"
                 >
                   <Plus className="h-4 w-4" />
@@ -616,7 +654,17 @@ export default function ComprasPage() {
                         {fields.length > 1 && (
                           <button
                             type="button"
-                            onClick={() => remove(index)}
+                            onClick={() => {
+                              // Remover item dos arrays de busca
+                              const newProdutoSearch = [...produtoSearch];
+                              const newOpenSuggest = [...openSuggest];
+                              newProdutoSearch.splice(index, 1);
+                              newOpenSuggest.splice(index, 1);
+                              setProdutoSearch(newProdutoSearch);
+                              setOpenSuggest(newOpenSuggest);
+                              // Remover item do formulário
+                              remove(index);
+                            }}
                             className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
                             title="Remover item"
                           >
@@ -785,35 +833,35 @@ export default function ComprasPage() {
               <div className="bg-gray-50 px-6 py-4 rounded-lg">
                 <p className="text-sm text-gray-600 mb-1">Valor Total dos Itens</p>
                 <p className="text-xl font-bold text-gray-900">
-                  {formatCurrency(valorTotalItens)}
+                  {formatCurrency(valorTotalItensExibicao)}
                 </p>
-                {desconto > 0 && (
+                {descontoExibicao > 0 && (
                   <>
                     <p className="text-xs text-red-600 mt-1">
-                      Desconto: -{formatCurrency(desconto)}
+                      Desconto: -{formatCurrency(descontoExibicao)}
                     </p>
                     <p className="text-sm text-gray-600 mt-1 pt-1 border-t border-gray-300">
-                      Total com desconto: <span className="font-bold">{formatCurrency(valorTotalCompra)}</span>
+                      Total com desconto: <span className="font-bold">{formatCurrency(valorTotalCompraExibicao)}</span>
                     </p>
                   </>
                 )}
               </div>
               <div className={`px-6 py-4 rounded-lg ${
-                Math.abs(calcularValorTotalPagamentos() - valorTotalCompra) <= 0.01 
+                Math.abs(calcularValorTotalPagamentos() - valorTotalCompraExibicao) <= 0.01 
                   ? 'bg-green-50' 
                   : 'bg-red-50'
               }`}>
                 <p className="text-sm text-gray-600 mb-1">Valor Total dos Pagamentos</p>
                 <p className={`text-xl font-bold ${
-                  Math.abs(calcularValorTotalPagamentos() - valorTotalCompra) <= 0.01 
+                  Math.abs(calcularValorTotalPagamentos() - valorTotalCompraExibicao) <= 0.01 
                     ? 'text-green-600' 
                     : 'text-red-600'
                 }`}>
                   {formatCurrency(calcularValorTotalPagamentos())}
                 </p>
-                {Math.abs(calcularValorTotalPagamentos() - valorTotalCompra) > 0.01 && (
+                {Math.abs(calcularValorTotalPagamentos() - valorTotalCompraExibicao) > 0.01 && (
                   <p className="text-xs text-red-600 mt-1">
-                    Deve ser igual ao total {desconto > 0 ? 'com desconto' : 'da compra'}
+                    Deve ser igual ao total {descontoExibicao > 0 ? 'com desconto' : 'da compra'}
                   </p>
                 )}
               </div>

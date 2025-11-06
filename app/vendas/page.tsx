@@ -51,7 +51,7 @@ export default function VendasPage() {
   const [produtoSearch, setProdutoSearch] = useState<string[]>([]);
   const [openSuggest, setOpenSuggest] = useState<boolean[]>([]);
   const [showParcelasModal, setShowParcelasModal] = useState(false);
-  const [estoquePorItem, setEstoquePorItem] = useState<{ [index: number]: number | null }>({});
+  const [estoquePorItem, setEstoquePorItem] = useState<{ [fieldId: string]: number | null }>({});
   const [filters, setFilters] = useState({
     nomeCliente: '',
     numeroVenda: '',
@@ -66,7 +66,7 @@ export default function VendasPage() {
       pagamentos: [{ formaPagamento: 'PIX', valor: '', dataVencimento: getTodayLocalDate(), quantidadeParcelas: 1 }],
     }
   });
-  const { fields, append, remove } = useFieldArray({ control: vendaForm.control, name: 'itens' });
+  const { fields, append, prepend, remove } = useFieldArray({ control: vendaForm.control, name: 'itens' });
   const { fields: pagFields, append: appendPag, remove: removePag } = useFieldArray({ control: vendaForm.control, name: 'pagamentos' });
 
   // Calcular valor total dos itens e atualizar automaticamente o valor do pagamento
@@ -338,7 +338,13 @@ export default function VendasPage() {
             <div>
               <div className="flex justify-between items-center mb-3">
                 <label className="text-sm font-medium text-gray-700">Produtos *</label>
-                <button type="button" onClick={() => { append({ produtoId: '', quantidade: 1, valorUnitario: '' }); }} className="flex items-center space-x-1 text-sm text-indigo-600 hover:text-indigo-700">
+                <button type="button" onClick={() => {
+                  // Adicionar item vazio no início dos arrays de busca
+                  setProdutoSearch(['', ...produtoSearch]);
+                  setOpenSuggest([false, ...openSuggest]);
+                  // Adicionar novo item no início da lista
+                  prepend({ produtoId: '', quantidade: 1, valorUnitario: '' });
+                }} className="flex items-center space-x-1 text-sm text-indigo-600 hover:text-indigo-700">
                   <Plus className="h-4 w-4" />
                   <span>Adicionar Produto</span>
                 </button>
@@ -351,7 +357,7 @@ export default function VendasPage() {
                     <div className="relative">
                       <input
                         value={produtoSearch[index] ?? ''}
-                        onChange={(e) => { const val = e.target.value; const a=[...produtoSearch]; a[index]=val; setProdutoSearch(a); const o=[...openSuggest]; o[index]=true; setOpenSuggest(o); setEstoquePorItem(prev => ({ ...prev, [index]: null })); }}
+                        onChange={(e) => { const val = e.target.value; const a=[...produtoSearch]; a[index]=val; setProdutoSearch(a); const o=[...openSuggest]; o[index]=true; setOpenSuggest(o); setEstoquePorItem(prev => ({ ...prev, [field.id]: null })); }}
                         onFocus={() => { const o=[...openSuggest]; o[index]=true; setOpenSuggest(o); }}
                         placeholder="Digite para buscar produto"
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -371,13 +377,13 @@ export default function VendasPage() {
                               if (p.temEstoque) {
                                 try {
                                   const estoqueResponse = await api.get(`/compra/estoque/produto/${p.id}`);
-                                  setEstoquePorItem(prev => ({ ...prev, [index]: estoqueResponse.data.quantidadeTotal || 0 }));
+                                  setEstoquePorItem(prev => ({ ...prev, [field.id]: estoqueResponse.data.quantidadeTotal || 0 }));
                                 } catch (error) {
                                   console.error('Erro ao carregar estoque:', error);
-                                  setEstoquePorItem(prev => ({ ...prev, [index]: 0 }));
+                                  setEstoquePorItem(prev => ({ ...prev, [field.id]: 0 }));
                                 }
                               } else {
-                                setEstoquePorItem(prev => ({ ...prev, [index]: null }));
+                                setEstoquePorItem(prev => ({ ...prev, [field.id]: null }));
                               }
                             }} className="w-full text-left px-3 py-2 hover:bg-indigo-50 focus:bg-indigo-50">
                               <div className="flex justify-between items-center">
@@ -391,11 +397,11 @@ export default function VendasPage() {
                       )}
                     </div>
                     <input type="hidden" {...vendaForm.register(`itens.${index}.produtoId` as const, { required: true })} />
-                    {estoquePorItem[index] !== null && estoquePorItem[index] !== undefined && (
+                    {estoquePorItem[field.id] !== null && estoquePorItem[field.id] !== undefined && (
                       <div className="mt-1 text-xs">
                         <span className="text-gray-600">Estoque disponível: </span>
-                        <span className={`font-semibold ${estoquePorItem[index]! > 0 ? 'text-blue-600' : 'text-red-600'}`}>
-                          {estoquePorItem[index] ?? 0} unidades
+                        <span className={`font-semibold ${estoquePorItem[field.id]! > 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                          {estoquePorItem[field.id] ?? 0} unidades
                         </span>
                       </div>
                     )}
@@ -436,18 +442,21 @@ export default function VendasPage() {
                   </div>
                   <div className="md:col-span-1 flex items-end justify-end">
                     {fields.length > 1 && <button type="button" onClick={()=>{
-                      remove(index);
-                      // Remover estoque do item removido e reindexar os outros
-                      const newEstoque: { [index: number]: number | null } = {};
-                      Object.keys(estoquePorItem).forEach(key => {
-                        const idx = Number(key);
-                        if (idx < index) {
-                          newEstoque[idx] = estoquePorItem[idx];
-                        } else if (idx > index) {
-                          newEstoque[idx - 1] = estoquePorItem[idx];
-                        }
+                      // Remover item dos arrays de busca
+                      const newProdutoSearch = [...produtoSearch];
+                      const newOpenSuggest = [...openSuggest];
+                      newProdutoSearch.splice(index, 1);
+                      newOpenSuggest.splice(index, 1);
+                      setProdutoSearch(newProdutoSearch);
+                      setOpenSuggest(newOpenSuggest);
+                      // Remover estoque do item usando field.id
+                      setEstoquePorItem(prev => {
+                        const newEstoque = { ...prev };
+                        delete newEstoque[field.id];
+                        return newEstoque;
                       });
-                      setEstoquePorItem(newEstoque);
+                      // Remover item do formulário
+                      remove(index);
                     }} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Remover item"><Trash2 className="h-4 w-4" /></button>}
                   </div>
                 </div>
