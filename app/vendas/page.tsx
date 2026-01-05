@@ -13,7 +13,7 @@ interface Funcionario { id: string; nome: string }
 
 interface VendaItemForm { produtoId: string; quantidade: number | string; valorUnitario: number | string }
 interface VendaPagamentoForm { formaPagamento: string; valor: number | string; dataVencimento: string; dataPagamento?: string; quantidadeParcelas: number | string; observacao?: string }
-interface VendaForm { nomeCliente: string; rua?: string; bairro?: string; cidade?: string; numero?: string; observacao?: string; desconto?: number; dataVenda: string; vendedorId: string; itens: VendaItemForm[]; pagamentos: VendaPagamentoForm[] }
+interface VendaForm { nomeCliente: string; rua?: string; bairro?: string; cidade?: string; numero: string; observacao?: string; desconto?: number; dataVenda: string; vendedorId: string; itens: VendaItemForm[]; pagamentos: VendaPagamentoForm[] }
 
 interface Venda {
   id: string;
@@ -63,7 +63,7 @@ function VendasPageContent() {
 
   const vendaForm = useForm<VendaForm>({
     defaultValues: {
-      nomeCliente: '', dataVenda: getTodayLocalDate(), vendedorId: '',
+      nomeCliente: '', dataVenda: getTodayLocalDate(), vendedorId: '', numero: '',
       itens: [{ produtoId: '', quantidade: 1, valorUnitario: '' }],
       pagamentos: [{ formaPagamento: 'PIX', valor: '', dataVencimento: getTodayLocalDate(), quantidadeParcelas: 1 }],
     }
@@ -84,7 +84,7 @@ function VendasPageContent() {
   // Validar se todos os campos obrigatórios estão preenchidos
   const isFormValid = (() => {
     // Verificar campos obrigatórios principais
-    if (!formValues.nomeCliente?.trim() || !formValues.vendedorId || !formValues.dataVenda) {
+    if (!formValues.nomeCliente?.trim() || !formValues.vendedorId || !formValues.dataVenda || !formValues.numero?.trim()) {
       return false;
     }
     // Verificar se tem pelo menos 1 item válido
@@ -159,6 +159,7 @@ function VendasPageContent() {
         nomeCliente: '',
         dataVenda: getTodayLocalDate(),
         vendedorId: '',
+        numero: '',
         itens: [{ produtoId: '', quantidade: 1, valorUnitario: '' }],
         pagamentos: [{ formaPagamento: 'PIX', valor: '', dataVencimento: getTodayLocalDate(), quantidadeParcelas: 1 }],
       });
@@ -340,7 +341,7 @@ function VendasPageContent() {
         rua: data.rua || undefined,
         bairro: data.bairro || undefined,
         cidade: data.cidade || undefined,
-        numero: data.numero || undefined,
+        numero: data.numero,
         observacao: data.observacao || undefined,
         desconto: desconto,
         dataVenda: data.dataVenda,
@@ -453,7 +454,7 @@ function VendasPageContent() {
         rua: data.rua || undefined,
         bairro: data.bairro || undefined,
         cidade: data.cidade || undefined,
-        numero: data.numero || undefined,
+        numero: data.numero,
         observacao: data.observacao || undefined,
         desconto: desconto,
         dataVenda: data.dataVenda,
@@ -515,11 +516,11 @@ function VendasPageContent() {
 
       {showForm && (
         <div className="bg-white rounded-lg shadow p-6 mb-8">
-          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-900">{editingVendaId ? 'Editar Venda' : 'Cadastrar Venda'}</h3>
             <div className="flex items-center gap-3">
-              <label className="text-sm font-semibold text-gray-800" htmlFor="numero-venda">Número da venda</label>
-              <input id="numero-venda" {...vendaForm.register('numero')} className="px-3 py-2 border rounded-lg w-48" />
+              <label className="text-sm font-semibold text-gray-800" htmlFor="numero-venda">Número da venda *</label>
+              <input id="numero-venda" {...vendaForm.register('numero', { required: 'O número da venda é obrigatório' })} className="px-3 py-2 border rounded-lg w-48" />
             </div>
           </div>
           <form onSubmit={vendaForm.handleSubmit(editingVendaId ? handleUpdateVenda : handleCreateVenda)} className="space-y-6">
