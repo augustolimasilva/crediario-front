@@ -1,7 +1,7 @@
 'use client';
 
 import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { toast } from 'sonner';
@@ -40,6 +40,7 @@ const getTodayLocalDate = () => {
 export default function VendasPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [vendas, setVendas] = useState<Venda[]>([]);
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [vendedores, setVendedores] = useState<Funcionario[]>([]);
@@ -48,6 +49,7 @@ export default function VendasPage() {
   const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [editingVendaId, setEditingVendaId] = useState<string | null>(null);
   const [produtoSearch, setProdutoSearch] = useState<string[]>([]);
   const [openSuggest, setOpenSuggest] = useState<boolean[]>([]);
   const [showParcelasModal, setShowParcelasModal] = useState(false);
@@ -137,6 +139,35 @@ export default function VendasPage() {
     } 
   }, [session, page, pageSize, filters]);
 
+  // Detectar parâmetro de edição na URL
+  useEffect(() => {
+    const editId = searchParams.get('edit');
+    if (editId && !editingVendaId && session) {
+      // Primeiro tenta encontrar na lista atual
+      const vendaToEdit = vendas.find(v => v.id === editId);
+      if (vendaToEdit) {
+        handleEditVenda(vendaToEdit);
+      } else if (vendas.length > 0) {
+        // Se a lista já foi carregada mas a venda não está nela, buscar diretamente
+        fetchVendaById(editId);
+      }
+    } else if (!editId && editingVendaId) {
+      // Se não há mais parâmetro edit na URL e há uma venda sendo editada, fechar o formulário
+      setEditingVendaId(null);
+      setShowForm(false);
+      vendaForm.reset({
+        nomeCliente: '',
+        dataVenda: getTodayLocalDate(),
+        vendedorId: '',
+        itens: [{ produtoId: '', quantidade: 1, valorUnitario: '' }],
+        pagamentos: [{ formaPagamento: 'PIX', valor: '', dataVencimento: getTodayLocalDate(), quantidadeParcelas: 1 }],
+      });
+      setProdutoSearch([]);
+      setOpenSuggest([]);
+      setEstoquePorItem({});
+    }
+  }, [searchParams, vendas.length, editingVendaId, session]);
+
   const loadVendas = async () => {
     try {
       setIsLoading(true);
@@ -161,6 +192,192 @@ export default function VendasPage() {
       const { data } = await api.get('/funcionario');
       setVendedores(data.data || data);
     } catch {}
+  };
+
+  const fetchVendaById = async (vendaId: string) => {
+    try {
+      const { data } = await api.get(`/venda/${vendaId}`);
+      handleEditVenda(data);
+    } catch (error: any) {
+      console.error('Erro ao carregar venda:', error);
+      toast.error('Erro ao carregar venda para edição');
+    }
+  };
+
+  const handleEditVenda = (venda: Venda) => {
+    setEditingVendaId(venda.id);
+    setShowForm(true);
+    
+    // Formatar data para YYYY-MM-DD
+    const dataVendaFormatada = venda.dataVenda.split('T')[0];
+    
+    // Preparar itens
+    const itensForm = venda.itens.map(item => ({
+      produtoId: item.produto.id,
+      quantidade: item.quantidade,
+      valorUnitario: item.valorUnitario,
+    }));
+    
+    // Preparar busca de produtos
+    const produtoSearchArray = venda.itens.map(item => item.produto.nome);
+    setProdutoSearch(produtoSearchArray);
+    setOpenSuggest(new Array(venda.itens.length).fill(false));
+    
+    // Preparar pagamentos
+    const pagamentosForm = venda.pagamentos.map(pag => ({
+      formaPagamento: pag.formaPagamento,
+      valor: pag.valor,
+      dataVencimento: pag.dataVencimento.split('T')[0],
+      dataPagamento: pag.dataPagamento ? pag.dataPagamento.split('T')[0] : undefined,
+      quantidadeParcelas: 1, // Por enquanto, assumir 1 parcela (pode ser melhorado)
+      observacao: '',
+    }));
+    
+    // Resetar e preencher formulário
+    vendaForm.reset({
+      nomeCliente: venda.nomeCliente,
+      rua: (venda as any).rua || '',
+      bairro: (venda as any).bairro || '',
+      cidade: (venda as any).cidade || '',
+      numero: (venda as any).numero || '',
+      observacao: (venda as any).observacao || '',
+      desconto: (venda as any).desconto || 0,
+      dataVenda: dataVendaFormatada,
+      vendedorId: venda.vendedor.id,
+      itens: itensForm,
+      pagamentos: pagamentosForm.length > 0 ? pagamentosForm : [{ formaPagamento: 'PIX', valor: '', dataVencimento: getTodayLocalDate(), quantidadeParcelas: 1 }],
+    });
+  };
+
+  // Carregar estoque quando estiver editando e os fields forem criados
+  useEffect(() => {
+    if (editingVendaId && fields.length > 0 && produtoSearch.length > 0 && produtos.length > 0) {
+      const estoquePromises = fields.map(async (field, index) => {
+        const produtoId = vendaForm.getValues(`itens.${index}.produtoId` as const);
+        if (produtoId) {
+          const produto = produtos.find(p => p.id === produtoId);
+          if (produto?.temEstoque && !estoquePorItem[field.id]) {
+            try {
+              const estoqueResponse = await api.get(`/compra/estoque/produto/${produtoId}`);
+              setEstoquePorItem(prev => ({ ...prev, [field.id]: estoqueResponse.data.quantidadeTotal || 0 }));
+            } catch (error) {
+              console.error('Erro ao carregar estoque:', error);
+            }
+          }
+        }
+      });
+      Promise.all(estoquePromises);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingVendaId, fields.length, produtoSearch.length, produtos.length]);
+
+  const handleUpdateVenda = async (data: VendaForm) => {
+    if (!editingVendaId) return;
+    
+    try {
+      setIsLoading(true);
+      if (!data.vendedorId) { toast.error('Selecione o vendedor'); return; }
+      if (!data.itens.length) { toast.error('Informe ao menos um item'); return; }
+      
+      const valorTotalItens = data.itens.reduce((total, item) => {
+        return total + (Number(item.quantidade) || 0) * (Number(item.valorUnitario) || 0);
+      }, 0);
+      const desconto = Number(data.desconto || 0);
+      const valorTotal = Math.max(0, valorTotalItens - desconto);
+      const valorTotalPagamentos = data.pagamentos.reduce((total, p) => total + (Number(p.valor) || 0), 0);
+      
+      if (Math.abs(valorTotalPagamentos - valorTotal) > 0.01) {
+        toast.error(`O valor total dos pagamentos (R$ ${valorTotalPagamentos.toFixed(2)}) deve ser igual ao valor total da venda (R$ ${valorTotal.toFixed(2)})`);
+        setIsLoading(false);
+        return;
+      }
+
+      const itensValidados = data.itens.map(i => {
+        if (!i.produtoId) {
+          throw new Error('Produto não selecionado em um dos itens');
+        }
+        if (!i.quantidade || Number(i.quantidade) <= 0) {
+          throw new Error('Quantidade inválida em um dos itens');
+        }
+        if (!i.valorUnitario || Number(i.valorUnitario) <= 0) {
+          throw new Error('Valor unitário inválido em um dos itens');
+        }
+        return { 
+          produtoId: i.produtoId, 
+          quantidade: Number(i.quantidade), 
+          valorUnitario: Number(i.valorUnitario) 
+        };
+      });
+
+      const pagamentosValidados = data.pagamentos.map((p, idx) => {
+        if (!p.formaPagamento) {
+          throw new Error('Forma de pagamento não selecionada');
+        }
+        const valorPagamento = idx === 0 ? valorTotal : (Number(p.valor) || 0);
+        if (valorPagamento <= 0) {
+          throw new Error('Valor do pagamento inválido');
+        }
+        if (!p.dataVencimento) {
+          throw new Error('Data de vencimento não informada');
+        }
+        return { 
+          ...p, 
+          valor: valorPagamento, 
+          quantidadeParcelas: Number(p.quantidadeParcelas) || 1,
+          dataVencimento: p.dataVencimento,
+          dataPagamento: p.dataPagamento || undefined,
+          observacao: p.observacao || undefined
+        };
+      });
+
+      const usuarioId = (session as any)?.user?.id;
+      if (!usuarioId) {
+        throw new Error('Usuário não autenticado');
+      }
+
+      const payload = {
+        nomeCliente: data.nomeCliente,
+        rua: data.rua || undefined,
+        bairro: data.bairro || undefined,
+        cidade: data.cidade || undefined,
+        numero: data.numero || undefined,
+        observacao: data.observacao || undefined,
+        desconto: desconto,
+        dataVenda: data.dataVenda,
+        vendedorId: data.vendedorId,
+        usuarioId: usuarioId,
+        itens: itensValidados,
+        pagamentos: pagamentosValidados,
+      };
+
+      await api.put(`/venda/${editingVendaId}`, payload);
+      toast.success('Venda atualizada com sucesso!');
+      setShowForm(false);
+      setEditingVendaId(null);
+      vendaForm.reset();
+      setProdutoSearch([]);
+      setOpenSuggest([]);
+      setEstoquePorItem({});
+      router.push('/vendas');
+      loadVendas();
+    } catch (e: any) {
+      console.error('Erro ao atualizar venda:', e);
+      let errorMessage = 'Erro ao atualizar venda';
+      if (e.response?.data) {
+        if (e.response.data.message) {
+          errorMessage = e.response.data.message;
+        } else if (e.response.data.error) {
+          errorMessage = e.response.data.error;
+        } else if (typeof e.response.data === 'string') {
+          errorMessage = e.response.data;
+        }
+      } else if (e.message) {
+        errorMessage = e.message;
+      }
+      toast.error(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleCreateVenda = async (data: VendaForm) => {
@@ -299,13 +516,13 @@ export default function VendasPage() {
       {showForm && (
         <div className="bg-white rounded-lg shadow p-6 mb-8">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">Cadastrar Venda</h3>
+            <h3 className="text-lg font-semibold text-gray-900">{editingVendaId ? 'Editar Venda' : 'Cadastrar Venda'}</h3>
             <div className="flex items-center gap-3">
               <label className="text-sm font-semibold text-gray-800" htmlFor="numero-venda">Número da venda</label>
               <input id="numero-venda" {...vendaForm.register('numero')} className="px-3 py-2 border rounded-lg w-48" />
             </div>
           </div>
-          <form onSubmit={vendaForm.handleSubmit(handleCreateVenda)} className="space-y-6">
+          <form onSubmit={vendaForm.handleSubmit(editingVendaId ? handleUpdateVenda : handleCreateVenda)} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Nome do Cliente *</label>
@@ -601,13 +818,21 @@ export default function VendasPage() {
             )}
 
             <div className="flex justify-end space-x-3">
-              <button type="button" onClick={()=>{ setShowForm(false); vendaForm.reset(); setProdutoSearch([]); setOpenSuggest([]); setEstoquePorItem({}); }} className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">Cancelar</button>
+              <button type="button" onClick={()=>{ 
+                setShowForm(false); 
+                setEditingVendaId(null);
+                vendaForm.reset(); 
+                setProdutoSearch([]); 
+                setOpenSuggest([]); 
+                setEstoquePorItem({});
+                router.push('/vendas');
+              }} className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">Cancelar</button>
               <button 
                 type="submit" 
                 disabled={isLoading || !isFormValid} 
                 className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isLoading ? 'Salvando...' : 'Salvar'}
+                {isLoading ? (editingVendaId ? 'Atualizando...' : 'Salvando...') : (editingVendaId ? 'Atualizar' : 'Salvar')}
               </button>
             </div>
           </form>
