@@ -361,13 +361,26 @@ export default function CompraDetailPage({ params }: { params: Promise<{ id: str
               <form onSubmit={(e) => {
                 e.preventDefault();
                 const formData = new FormData(e.currentTarget);
+                const dataVencimento = formData.get('dataVencimento') as string | null;
                 const data = {
+                  dataVencimento: dataVencimento || undefined,
                   dataPagamento: formData.get('dataPagamento') || null,
                   observacao: formData.get('observacao') || null
                 };
                 handleUpdateLancamento(data);
               }}>
                 <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Data de Vencimento
+                    </label>
+                    <input
+                      type="date"
+                      name="dataVencimento"
+                      defaultValue={lancamentoEditando.dataVencimento ? (lancamentoEditando.dataVencimento.includes('T') ? lancamentoEditando.dataVencimento.split('T')[0] : lancamentoEditando.dataVencimento) : ''}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Data de Pagamento
